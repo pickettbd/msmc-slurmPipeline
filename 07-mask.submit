@@ -67,15 +67,23 @@ submitJob()
 	ARRAY_JOBS="${7}"
 	JOBS_AT_ONCE="${8}"
 
-		#--array=${ARRAY_JOBS}%${JOBS_AT_ONCE} \
+	# computed resource requirements based on first two scaffolds of BFT, one of which is in the top 3 for length.
+	# These tests were done with 16 cores and 64 GB RAM available. Only 1 core was used on average. We could try it with one core,
+	# but 2 may be required to avoid a bottlneck during decompression. We'll test with 2 and see what happens next.
+	# memory requirements: y = 1.17372457486x + 10.535 <-- y: RAM in GB, x: seq in Mbp
+	#   time requirements: y = 1.069801045x - 0.647757586 <-- y: time in hours, x: seq in Mbp
+	# the problem with array jobs is that I can't determine the resources dynamically. I should really use array jobs in the future only when the data chunks are of equal size.
+
+	# longest seq for BFT is ~8.933 Mbp. So TIME > 8.91 hours and RAM > 21.02 GB.
+
 	sbatch \
 		-J ${JOB_NAME} \
 		--signal=B:USR1@300 \
-		--array=1-2%1 \
-		--time=0-01:00:00 \
-		--ntasks=4 \
+		--array=${ARRAY_JOBS}%${JOBS_AT_ONCE} \
+		--time=0-10:00:00 \
+		--ntasks=2 \
 		--nodes=1 \
-		--mem=16G \
+		--mem=22G \
 		-o job_files/%x__%A-%a.out \
 		-e job_files/%x__%A-%a.err \
 		${SCRIPTS_DIR}/07-mask.slurm \

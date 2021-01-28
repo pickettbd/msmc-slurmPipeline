@@ -139,6 +139,13 @@ OUT_MASK_VCF_GZ="${OUT_PFX}${ASM_SEQ_ID}${OUT_VCF_SFX}"
 OUTPUT_DIR=$(readlink -n -m `dirname "${OUT_PFX}"`)
 OUTPUT_FILES=("${OUT_MASK_BED_GZ}" "${OUT_MASK_VCF_GZ}")
 
+# set thread counts
+MPILEUP_EXTRA_THREADS=$((${SLURM_NTASKS}-4))
+if [[ ${MPILEUP_EXTRA_THREADS} -lt 0 ]]
+then
+	MPILEUP_EXTRA_TRHEADS=0
+fi
+
 # 	check for existence of input file(s)
 #		We assume bcftools & bamCaller.py are capable of recognizing whether the files
 #		they require exist.
@@ -183,10 +190,10 @@ dotlockfile -u "${SLURM_SUBMIT_DIR}/.cleanup.tsv.lock"
 TMP_OUT_BED="${WORK_DIR}/`basename ${OUT_MASK_BED_GZ}`"
 TMP_OUT_VCF="${WORK_DIR}/`basename ${OUT_MASK_VCF_GZ}`"
 
-#	run the program of interest (4 threads ideal: (1) bcftools mpileup, (2) bcftools call, (3) bamCaller.py, & (4) bzip
+#	run the program of interest (4+ threads ideal: (1) bcftools mpileup, (2) bcftools call, (3) bamCaller.py, & (4) bzip
 set -o pipefail
-bcftools mpileup -B -q 20 -C 0 -r ${ASM_SEQ_ID} -f "${ASM_FA}" "${ALN_BAM}" \
-	| bcftools call -c -V indels \
+bcftools mpileup --threads "${MPILEUP_EXTRA_THREADS}" -B -q 20 -C 0 -r ${ASM_SEQ_ID} -f "${ASM_FA}" "${ALN_BAM}" \
+	| bcftools call --threads "${MPILEUP_EXTRA_THREADS}" -c -V indels \
 	| bamCaller.py ${DEPTH} "${TMP_OUT_BED}" --minMapQ 20 --minConsQ 20 \
 	| gzip -c \
 	> "${TMP_OUT_VCF}" &
