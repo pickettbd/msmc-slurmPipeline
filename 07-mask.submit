@@ -69,7 +69,8 @@ submitJob()
 
 	# computed resource requirements based on first two scaffolds of BFT, one of which is in the top 3 for length.
 	# These tests were done with 16 cores and 64 GB RAM available. Only 1 core was used on average. We could try it with one core,
-	# but 2 may be required to avoid a bottlneck during decompression. We'll test with 2 and see what happens next.
+	# but 2 may be required to avoid a bottlneck during decompression. We'll test with 2 and see what happens next. Update: I tested
+	# with 2 cores and the jobs were consistently ~50% utilization. I think it is safe to use only 1 core.
 	# memory requirements: y = 1.17372457486x + 10.535 <-- y: RAM in GB, x: seq in Mbp
 	#   time requirements: y = 1.069801045x - 0.647757586 <-- y: time in hours, x: seq in Mbp
 	# the problem with array jobs is that I can't determine the resources dynamically. I should really use array jobs in the future only when the data chunks are of equal size.
@@ -81,7 +82,7 @@ submitJob()
 		--signal=B:USR1@300 \
 		--array=${ARRAY_JOBS}%${JOBS_AT_ONCE} \
 		--time=0-10:00:00 \
-		--ntasks=2 \
+		--ntasks=1 \
 		--nodes=1 \
 		--mem=22G \
 		-o job_files/%x__%A-%a.out \
