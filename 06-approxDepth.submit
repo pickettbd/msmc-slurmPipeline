@@ -1,0 +1,121 @@
+#! /bin/bash
+
+# Ensure we're running from the correct location
+CWD_check()
+{
+	#local SCRIPTS_DIR
+	local MAIN_DIR
+	local RUN_DIR
+
+	SCRIPTS_DIR=$(readlink -f `dirname "${BASH_SOURCE[0]}"`)
+	MAIN_DIR=$(readlink -f `dirname "${SCRIPTS_DIR}/"`)
+	RUN_DIR=$(readlink -f .)
+
+	if [ "${RUN_DIR}" != "${MAIN_DIR}" ] || ! [[ "${SCRIPTS_DIR}" =~ ^"${MAIN_DIR}"/scripts.* ]]
+	then
+		printf "\n\t%s\n\t%s\n\n" "Script must be run from ${MAIN_DIR}" "You are currently at:   ${RUN_DIR}" 1>&2
+		exit 1
+	fi
+}
+CWD_check
+
+submitJob()
+{
+	local JOB_NAME LONGEST_N_SEQS ASM_FAI ALN_BAM OUTPUT_DEPTHS_TSV AVE_DEPTHS_TXT
+	JOB_NAME="${1}"
+	LONGEST_N_SEQS="${2}"
+	ASM_FAI="${3}"
+	ALN_BAM="${4}"
+	OUTPUT_DEPTHS_TSV="${5}"
+	AVE_DEPTH_TXT="${6}"
+
+	NTASKS=${LONGEST_N_SEQS}
+	if [ ${NTASKS} -gt 16 ]
+	then
+		NTASKS=16
+	fi
+
+	sbatch \
+		-J ${JOB_NAME} \
+		--signal=B:USR1@120 \
+		--time=0-00:15:00 \
+		--ntasks=${NTASKS} \
+		--nodes=1 \
+		--mem-per-cpu=1G \
+		-o job_files/%x__%j.out \
+		-e job_files/%x__%j.err \
+		${SCRIPTS_DIR}/06-approxDepth.slurm \
+		"${LONGEST_N_SEQS}" \
+		"${ASM_FAI}" \
+		"${ALN_BAM}" \
+		"${OUTPUT_DEPTHS_TSV}" \
+		"${AVE_DEPTH_TXT}"
+
+}
+
+# ###################################### #
+# sanity check on input and output files #
+# ###################################### #
+
+# define key variables
+SPECIES="bft"
+PROJECT="${SPECIES}-msmc"
+NUM_LONG_SEQS=3
+ASSEMBLY_FAI="data/assembly/asm_long.fa.fai"
+ALIGNMENT_BAM="data/alns/pacbio-reads_x_asm-long.bam"
+ALIGNMENT_BAI="${ALIGNMENT_BAM}.bai"
+OUT_DEPTHS_TSV="data/alns/depths.tsv"
+AVE_DEPTHS="data/alns/approx_depth.txt"
+declare -a INPUT_FILES=("${ASSEMBLY_FAI}" "${ALIGNMENT_BAM}" "${ALIGNMENT_BAI}")
+declare -a OUTPUT_FILES=("${OUT_DEPTHS_TSV}" "${AVE_DEPTHS}")
+
+EXIT_EARLY=0
+
+# check for existence of needed input files
+for INPUT_FILE in "${INPUT_FILES[@]}"
+do
+	if [ ! -e "${INPUT_FILE}" ]
+	then
+		printf "%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" 1>&2
+		EXIT_EARLY=1
+	fi
+done
+unset INPUT_FILES
+
+# check for existence of needed output files
+declare -a ALREADY_EXIST_OUTPUT_FILES
+for OUTPUT_FILE in "${OUTPUT_FILES[@]}"
+do
+	if [ -e "${OUTPUT_FILE}" ]
+	then
+		ALREADY_EXIST_OUTPUT_FILES+=("${OUTPUT_FILE}")
+	fi
+done
+
+if [ "${#ALREADY_EXIST_OUTPUT_FILES[@]}" -gt 0 ]
+then
+	printf "%s\n" "ERROR: One or more output files already exists. To run this step, first delete them:" 1>&2
+	printf "\trm -f \"%s\"\n" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+	EXIT_EARLY=1
+fi
+unset ALREADY_EXIST_OUTPUT_FILES OUTPUT_FILES
+
+# exit without submitting the job, if needed
+if [ $EXIT_EARLY -ne 0 ]
+then
+	exit ${EXIT_EARLY}
+fi
+unset EXIT_EARLY
+
+# ####################### #
+# actually submit the job #
+# ####################### #
+HPC_JOB_NAME="${PROJECT}_approxDepth"
+submitJob \
+	"${HPC_JOB_NAME}" \
+	"${NUM_LONG_SEQS}" \
+	"${ASSEMBLY_FAI}" \
+	"${ALIGNMENT_BAM}" \
+	"${OUT_DEPTHS_TSV}" \
+	"${AVE_DEPTHS}"
+
