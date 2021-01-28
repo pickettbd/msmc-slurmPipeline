@@ -1,0 +1,191 @@
+#! /bin/bash
+
+# Ensure we're running from the correct location
+CWD_check()
+{
+	#local SCRIPTS_DIR
+	local MAIN_DIR
+	local RUN_DIR
+
+	SCRIPTS_DIR=$(readlink -f `dirname "${BASH_SOURCE[0]}"`)
+	MAIN_DIR=$(readlink -f `dirname "${SCRIPTS_DIR}/"`)
+	RUN_DIR=$(readlink -f .)
+
+	if [ "${RUN_DIR}" != "${MAIN_DIR}" ] || ! [[ "${SCRIPTS_DIR}" =~ ^"${MAIN_DIR}"/scripts.* ]]
+	then
+		printf "\n\t%s\n\t%s\n\n" "Script must be run from ${MAIN_DIR}" "You are currently at:   ${RUN_DIR}" 1>&2
+		exit 1
+	fi
+}
+CWD_check
+
+rangify()
+{
+	local a b FIRST IFS 
+	local -a RANGES
+	local RANGE_END=0
+
+
+	while [ $# -ge 1 ]
+	do
+		a=$((10#${1}))
+		shift
+		b=$((10#${1}))
+
+		if [[ ${a}+1 -eq ${b} ]]
+		then
+			if [ ${RANGE_END} -eq 0 ]
+			then
+				FIRST=${a}
+				RANGE_END=1
+			fi
+		else
+			if [ ${RANGE_END} -eq 1 ]
+			then
+				RANGES+=(${FIRST}-${a})
+			else
+				RANGES+=(${a})
+			fi
+			RANGE_END=0
+		fi
+
+	done
+
+	IFS=','
+	echo "${RANGES[*]}"
+}
+
+submitJob()
+{
+	local JOB_NAME ASM_FA ALN_BAM DEPTH ASM_SEQ_IDS_LIST OUT_PFX ARRAY_JOBS JOBS_AT_ONCE
+	JOB_NAME="${1}"
+	ASM_FA="${2}"
+	ALN_BAM="${3}"
+	DEPTH="${4}"
+	ASM_SEQ_IDS_LIST="${5}"
+	OUT_PFX="${6}"
+	ARRAY_JOBS="${7}"
+	JOBS_AT_ONCE="${8}"
+
+		#--array=${ARRAY_JOBS}%${JOBS_AT_ONCE} \
+	sbatch \
+		-J ${JOB_NAME} \
+		--signal=B:USR1@300 \
+		--array=1-2%1 \
+		--time=0-01:00:00 \
+		--ntasks=4 \
+		--nodes=1 \
+		--mem=16G \
+		-o job_files/%x__%A-%a.out \
+		-e job_files/%x__%A-%a.err \
+		${SCRIPTS_DIR}/07-mask.slurm \
+		"${ASM_FA}" \
+		"${ALN_BAM}" \
+		"${DEPTH}" \
+		"${ASM_SEQ_IDS_LIST}" \
+		"${OUT_PFX}" \
+		"${OUT_BED_SFX}" \
+		"${OUT_VCF_SFX}"
+}
+
+# ###################################### #
+# sanity check on input and output files #
+# ###################################### #
+
+# define key variables
+SPECIES="bft"
+PROJECT="${SPECIES}-msmc"
+ASSEMBLY_FA="data/assembly/asm_long.fa"
+ASSEMBLY_FAI="data/assembly/asm_long.fa.fai"
+ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}"
+ALIGNMENT_BAM="data/alns/pacbio-reads_x_asm-long.bam"
+ALIGNMENT_BAI="${ALIGNMENT_BAM}.bai"
+AVE_DEPTHS_FILE="data/alns/approx_depth.txt"
+OUTPUT_PFX="data/masks/mask_"
+OUT_BED_SFX=".bed.gz"
+OUT_VCF_SFX=".vcf.gz"
+JOBS_TO_RUN_AT_ONE_TIME=100
+
+declare -a INPUT_FILES=("${ASSEMBLY_FA}" "${ALIGNMENT_BAM}" "${ALIGNMENT_BAI}" "${AVE_DEPTHS_FILE}")
+OUTPUT_DIR=$(readlink -n -m `dirname "${OUTPUT_PFX}"`)
+
+EXIT_EARLY=0
+
+# check for existence of needed input files
+for INPUT_FILE in "${INPUT_FILES[@]}"
+do
+	if [ ! -e "${INPUT_FILE}" ]
+	then
+		printf "%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" 1>&2
+		EXIT_EARLY=1
+	fi
+done
+unset INPUT_FILES
+
+# exit without submitting the job, if needed
+if [ $EXIT_EARLY -ne 0 ]
+then
+	exit ${EXIT_EARLY}
+fi
+unset EXIT_EARLY
+
+# read in the average depth
+AVE_DEPTH=`cat "${AVE_DEPTHS_FILE}" | tr -d '\n'`
+
+# create output dir (if needed)
+mkdir -p "${OUTPUT_DIR}" &> /dev/null
+
+# loop through asm seqids to find output files
+declare -a TO_RUN
+COUNTER=1
+while read SEQID
+do
+	BED="${OUT_PFX}${SEQID}${BED_SFX}"
+	VCF="${OUT_PFX}${SEQID}${VCF_SFX}"
+	BED_OK="${BED}.ok"
+	VCF_OK="${VCF}.ok"
+
+	if [[ -e "${BED}" ]] && [[ -e "${VCF}" ]] && [[ -e "${BED_OK}" ]] && [[ -e "${VCF_OK}" ]]
+	then
+		if [[ -e "${BED_OK}" ]] && [[ -e "${VCF_OK}" ]]
+		then
+			printf "%s\n\t%s\n" "INFO: ${SEQID} has already finished. We will skip it. To proceed, first execute:" "rm -f ${BED} ${BED_OK} ${VCF} ${VCF_OK}" 1>&2
+		else
+			printf "%s\n" "INFO: ${SEQID} output files already exist, but it hadn't finished running. We will delete them and try again." 1>&2
+			rm -f "${BED}" "${VCF}" "${BED_OK}" "${VCF_OK}" &> /dev/null
+			TO_RUN+=("${COUNTER}")
+		fi
+	else
+		TO_RUN+=("${COUNTER}")
+	fi
+
+	COUNTER=$((${COUNTER}+1))
+
+done < <(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}")
+
+# skip job submission if range is empty
+if [ ${#TO_RUN[@]} -eq 0 ]
+then
+	printf "%s\n" "No jobs to run for ${SAI_PFX}"'*.sai' 1>&2
+	exit 0
+fi
+
+# create array submission ranges string
+ARRAY_RANGE=`rangify "${TO_RUN[@]}"`
+unset TO_RUN
+
+# ####################### #
+# actually submit the job #
+# ####################### #
+HPC_JOB_NAME="${PROJECT}_mask"
+submitJob \
+	"${HPC_JOB_NAME}" \
+	"${ASSEMBLY_FA}" \
+	"${ALIGNMENT_BAM}" \
+	"${AVE_DEPTH}" \
+	"${ASSEMBLY_SEQIDS}" \
+	"${OUTPUT_PFX}" \
+	"${ARRAY_RANGE}" \
+	"${JOBS_TO_RUN_AT_ONE_TIME}"
+
+
