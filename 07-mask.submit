@@ -145,11 +145,14 @@ mkdir -p "${OUTPUT_DIR}" &> /dev/null
 
 # loop through asm seqids to find output files
 declare -a TO_RUN
+declare -a ALREADY_FINISHED
+declare -a ALREADY_FINISHED_FILES
+declare -a ATTEMPTED
 COUNTER=1
 while read SEQID
 do
-	BED="${OUT_PFX}${SEQID}${BED_SFX}"
-	VCF="${OUT_PFX}${SEQID}${VCF_SFX}"
+	BED="${OUTPUT_PFX}${SEQID}${OUT_BED_SFX}"
+	VCF="${OUTPUT_PFX}${SEQID}${OUT_VCF_SFX}"
 	BED_OK="${BED}.ok"
 	VCF_OK="${VCF}.ok"
 
@@ -157,11 +160,12 @@ do
 	then
 		if [[ -e "${BED_OK}" ]] && [[ -e "${VCF_OK}" ]]
 		then
-			printf "%s\n\t%s\n" "INFO: ${SEQID} has already finished. We will skip it. To proceed, first execute:" "rm -f ${BED} ${BED_OK} ${VCF} ${VCF_OK}" 1>&2
+			ALREADY_FINISHED+=("${COUNTER}")
+			ALREADY_FINISHED_FILES+=("${BED}" "${BED_OK}" "${VCF}" "${VCF_OK}")
 		else
-			printf "%s\n" "INFO: ${SEQID} output files already exist, but it hadn't finished running. We will delete them and try again." 1>&2
 			rm -f "${BED}" "${VCF}" "${BED_OK}" "${VCF_OK}" &> /dev/null
 			TO_RUN+=("${COUNTER}")
+			ATTEMPTED+=("${COUNTER}")
 		fi
 	else
 		TO_RUN+=("${COUNTER}")
@@ -174,13 +178,32 @@ done < <(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}")
 # skip job submission if range is empty
 if [ ${#TO_RUN[@]} -eq 0 ]
 then
-	printf "%s\n" "No jobs to run for ${SAI_PFX}"'*.sai' 1>&2
+	printf "%s\n" "No jobs to run- all completed." 1>&2
 	exit 0
+fi
+
+# report on attempted
+if [ ${#ATTEMPTED[@]} -ne 0 ]
+then
+	RANGE=`rangify "${ATTEMPTED[@]}"`
+	printf "%s\n" "INFO: ${RANGE} has/have been attempted (1+ output files existed, but it hadn't" "finished running). These files were deleted so we could try again." 1>&2
+	unset RANGE
+fi
+
+# report on finished
+if [ ${#ALREADY_FINISHED[@]} -ne 0 ]
+then
+	RANGE=`rangify "${ALREADY_FINISHED[@]}"`
+	printf "%s\n" "INFO: ${RANGE} has/have already finished. We will skip it/them. To run them" "instead, first execute:" 1>&2
+	printf "\t%s " "rm -f" 1>&2
+	printf '"%s" ' "${ALREADY_FINISHED_FILES[@]}" 1>&2
+	printf "\n" 1>&2
+	unset RANGE
 fi
 
 # create array submission ranges string
 ARRAY_RANGE=`rangify "${TO_RUN[@]}"`
-unset TO_RUN
+unset TO_RUN ALREADY_FINISHED ATTEMPTED
 
 # ####################### #
 # actually submit the job #
