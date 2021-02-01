@@ -1,0 +1,113 @@
+#! /bin/bash
+
+# Ensure we're running from the correct location
+CWD_check()
+{
+	#local SCRIPTS_DIR
+	local MAIN_DIR
+	local RUN_DIR
+
+	SCRIPTS_DIR=$(readlink -f `dirname "${BASH_SOURCE[0]}"`)
+	MAIN_DIR=$(readlink -f `dirname "${SCRIPTS_DIR}/"`)
+	RUN_DIR=$(readlink -f .)
+
+	if [ "${RUN_DIR}" != "${MAIN_DIR}" ] || ! [[ "${SCRIPTS_DIR}" =~ ^"${MAIN_DIR}"/scripts.* ]]
+	then
+		printf "\n\t%s\n\t%s\n\n" "Script must be run from ${MAIN_DIR}" "You are currently at:   ${RUN_DIR}" 1>&2
+		exit 1
+	fi
+}
+CWD_check
+
+submitJob()
+{
+	local JOB_NAME OUT_MSMC_PFX INPUT_MULTIHETSEPS
+	JOB_NAME="${1}"
+	OUT_MSMC_PFX="${2}"
+	shift 2
+	INPUT_MULTIHETSEPS=("${@}")
+
+	echo sbatch \
+		-J ${JOB_NAME} \
+		--signal=B:USR1@300 \
+		--time=0-01:00:00 \
+		--ntasks=4 \
+		--nodes=1 \
+		--mem=4G \
+		-o job_files/%x__%j.out \
+		-e job_files/%x__%j.err \
+		${SCRIPTS_DIR}/09-msmc.slurm \
+		"${OUT_MSMC_PFX}" \
+		"${INPUT_MULTIHETSEPS[@]}"
+}
+
+# ###################################### #
+# sanity check on input and output files #
+# ###################################### #
+
+# define key variables
+SPECIES="bft"
+PROJECT="${SPECIES}-msmc"
+ASSEMBLY_FAI="data/assembly/asm_long.fa.fai" # only necessary for presence of input data
+ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}" # only necessary for presence of input data
+INPUT_DIR="data/multihetseps"
+INPUT_SFX=".multihetsep.txt"
+OUTPUT_PFX="data/msmc/msmc"
+
+#declare -a INPUT_FILES=($(find "${INPUT_DIR}" -type f -name '*'"${INPUT_SFX}" -printf '%f ')) # <-- get input files from `find' command (assumes all needed files exist)
+declare -a INPUT_FILES=( $(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}" | sed -r 's,^(.+)$,'"${INPUT_DIR}"'/\1'"${INPUT_SFX}"',' | tr '\n' ' ') ) # <-- get input files from list of sequence IDs (enables checking of input files existence)
+declare -a OUTPUT_FILES=("${OUTPUT_PFX}".{log,{final,loop}.txt})
+OUTPUT_DIR=$(readlink -n -m `dirname "${OUTPUT_PFX}"`)
+
+EXIT_EARLY=0
+
+# check for existence of needed input files
+for INPUT_FILE in "${INPUT_FILES[@]}"
+do
+	if [ ! -e "${INPUT_FILE}" ]
+	then
+		printf "%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" 1>&2
+		EXIT_EARLY=1
+	fi
+done
+
+# check for the existence of output files
+declare -a ALREADY_EXIST_OUTPUT_FILES
+for OUTPUT_FILE in "${OUTPUT_FILES[@]}"
+do
+	if [ -e "${OUTPUT_FILE}" ]
+	then
+		ALREADY_EXIST_OUTPUT_FILES+=("${OUTPUT_FILE}")
+	fi
+done
+
+if [ ${#ALREADY_EXIST_OUTPUT_FILES[@]} -gt 0 ]
+then
+	printf "%s\n\trm -f" "ERROR: Output file(s) already exist(s). To run this step, first remove it/them:" 1>&2
+	printf " %s" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+	printf "\n" 1>&2
+	EXIT_EARLY=1
+fi
+
+# exit without submitting the job, if needed
+if [ $EXIT_EARLY -ne 0 ]
+then
+	exit ${EXIT_EARLY}
+fi
+unset EXIT_EARLY
+
+# create output dir (if needed)
+mkdir -p "${OUTPUT_DIR}" &> /dev/null
+
+# ####################### #
+# actually submit the job #
+# ####################### #
+HPC_JOB_NAME="${PROJECT}_msmc"
+submitJob \
+	"${HPC_JOB_NAME}" \
+	"${OUTPUT_PFX}" \
+	"${INPUT_FILES[@]}"
+
+# Bonefish
+# 39828452. 0-00:20:33. 80% (3.2/4) CPU. 5% (3/64 GB) RAM.
+
