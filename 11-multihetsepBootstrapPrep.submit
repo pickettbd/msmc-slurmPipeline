@@ -95,7 +95,7 @@ ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}" # only necessary for presence of input data
 INPUT_DIR="data/multihetseps"
 INPUT_SFX=".multihetsep.txt"
 OUTPUT_DIR="data/multihetseps/bootstrap"
-OUTPUT_PFX="${OUTPUT_DIR}/bootstrap-rnd"
+OUTPUT_PFX="${OUTPUT_DIR}/round"
 OUTPUT_MFX="bootstrap_multihetsep.chr" # this cannot be changed, it is hardcoded into msmc-tools. MFX is made up: midfix (think prefix and suffix). The output files will be ${PFX}${i}/${MFX}${j}${SFX}, where i is 1..${BOOTSTRAP_REPS} and j is 1..${NUM_SEQS}
 OUTPUT_SFX=".txt" # this cannot be changed, it is hardcoded into msmc-tools
 
@@ -147,7 +147,7 @@ mkdir -p "${OUTPUT_DIR}" &> /dev/null
 # ####################### #
 # actually submit the job #
 # ####################### #
-HPC_JOB_NAME="${PROJECT}_multihetsepBootstrapPrep"
+HPC_JOB_NAME="${PROJECT}_bootstrapPrep"
 submitJob \
 	"${HPC_JOB_NAME}" \
 	"${RANDOM_SEED}" \

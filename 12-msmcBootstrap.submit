@@ -1,0 +1,110 @@
+#! /bin/bash
+
+# Ensure we're running from the correct location
+CWD_check()
+{
+	#local SCRIPTS_DIR
+	local MAIN_DIR
+	local RUN_DIR
+
+	SCRIPTS_DIR=$(readlink -f `dirname "${BASH_SOURCE[0]}"`)
+	MAIN_DIR=$(readlink -f `dirname "${SCRIPTS_DIR}/"`)
+	RUN_DIR=$(readlink -f .)
+
+	if [ "${RUN_DIR}" != "${MAIN_DIR}" ] || ! [[ "${SCRIPTS_DIR}" =~ ^"${MAIN_DIR}"/scripts.* ]]
+	then
+		printf "\n\t%s\n\t%s\n\n" "Script must be run from ${MAIN_DIR}" "You are currently at:   ${RUN_DIR}" 1>&2
+		exit 1
+	fi
+}
+CWD_check
+
+submitJob()
+{
+	local JOB_NAME OUT_MSMC_PFX INPUT_MULTIHETSEPS
+	JOB_NAME="${1}"
+	OUT_MSMC_PFX="${2}"
+	shift 2
+	INPUT_MULTIHETSEPS=("${@}")
+
+	echo sbatch \
+		-J ${JOB_NAME} \
+		--signal=B:USR1@300 \
+		--time=0-01:00:00 \
+		--ntasks=4 \
+		--nodes=1 \
+		--mem=4G \
+		-o job_files/%x__%j.out \
+		-e job_files/%x__%j.err \
+		${SCRIPTS_DIR}/12-msmcBootstrap.slurm \
+		"${OUT_MSMC_PFX}" \
+		"${INPUT_MULTIHETSEPS[@]}"
+}
+
+# ###################################### #
+# sanity check on input and output files #
+# ###################################### #
+
+# define key variables
+SPECIES="bft"
+PROJECT="${SPECIES}-msmc"
+INPUT_BASE_DIR="data/multihetseps/bootstrap"
+OUTPUT_BASE_DIR="data/msmc/bootstrap"
+INPUT_PFX="bootstrap_multihetsep.chr"
+INPUT_SFX=".txt"
+
+INPUT_DIRS=($(find "${INPUT_BASE_DIR}" -maxdepth 1 -type d -name 'round*' | sort -V))
+
+for INPUT_DIR in "${INPUT_DIRS[@]}"
+do
+	#i=`printf "%s" "${INPUT_DIR}" | sed -r 's,^.*round_([0-9]+)$,\1,'`
+	#OUTPUT_DIR="${OUTPUT_BASE_DIR}/round_${i}"
+
+	LAST_DIR_COMPONENT=`basename "${INPUT_DIR}"`
+	i=`printf "%s" "${LAST_DIR_COMPONENT}" | sed -r 's,^round_([0-9]+)$,\1,'`
+	OUTPUT_DIR="${OUTPUT_BASE_DIR}/${LAST_DIR_COMPONENT}"
+	OUTPUT_PFX="${OUTPUT_DIR}/msmc"
+
+	declare -a INPUT_FILES=($(find "${INPUT_DIR}" -maxdepth 1 -type f -name "${INPUT_PFX}"'*'"${INPUT_SFX}" -printf '%p ' | sort -V)) # <-- get input files from `find' command (assumes all needed files exist)
+	declare -a OUTPUT_FILES=("${OUTPUT_PFX}".{log,{final,loop}.txt})
+
+	# check for existence of needed input files
+	#	No point- input files were found by find,
+	#	so they obviously exist. We assume all needed
+	#	input files were created and are present
+	#	and perfecr
+
+	# check for the existence of output files
+	declare -a ALREADY_EXIST_OUTPUT_FILES
+	for OUTPUT_FILE in "${OUTPUT_FILES[@]}"
+	do
+		if [ -e "${OUTPUT_FILE}" ]
+		then
+			ALREADY_EXIST_OUTPUT_FILES+=("${OUTPUT_FILE}")
+		fi
+	done
+
+	if [ ${#ALREADY_EXIST_OUTPUT_FILES[@]} -gt 0 ]
+	then
+		printf "%s\n\trm -f" "ERROR: Output file(s) already exist(s). To run this step, first remove it/them:" 1>&2
+		printf " %s" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+		printf "\n" 1>&2
+	fi
+	unset ALREADY_EXIST_OUTPUT_FILES
+
+	# create output dir (if needed)
+	mkdir -p "${OUTPUT_DIR}" &> /dev/null
+
+	# ####################### #
+	# actually submit the job #
+	# ####################### #
+	HPC_JOB_NAME="${PROJECT}_bootstrap-${i}"
+	submitJob \
+		"${HPC_JOB_NAME}" \
+		"${OUTPUT_PFX}" \
+		"${INPUT_FILES[@]}"
+	
+	unset INPUT_FILES OUTPUT_FILES OUTPUT_DIR OUTPUT_PFX LAST_DIR_COMPONENT i
+
+done # end for loop through INPUT_DIRS
+
