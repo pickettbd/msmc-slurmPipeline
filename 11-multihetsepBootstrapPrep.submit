@@ -19,25 +19,63 @@ CWD_check()
 }
 CWD_check
 
+getRandomSeed()
+{
+	local SEED_FILE RANDOM_SEED NUM_RE
+	SEED_FILE="${1}"
+
+	if [ -e "${SEED_FILE}" ]
+	then
+		RANDOM_SEED=$(cat "${SEED_FILE}" | tr -d '\n')
+
+		NUM_RE='^[0-9]+$'
+		if [[ "${RANDOM_SEED}" =~ $NUM_RE ]]
+		then
+			UINT2_MAX=65535
+			if [ $RANDOM_SEED -gt $UINT2_MAX ]
+			then
+				printf "%s\n" "ERROR: The random seed (${RANDOM_SEED}) is too big. It should be a 2-byte unsigned integer."  1>&2
+				exit 1
+			fi
+			unset UINT2_MAX
+		else
+			printf "%s\n" "ERROR: The random seed (${RANDOM_SEED}) is malformatted. It should be a 2-byte unsigned integer."  1>&2
+			exit 1
+		fi
+		unset NUM_RE
+	else
+		printf "%s\n" "ERROR: The random seed file did not exist. Did you forget to run the previous step?"  1>&2
+		exit 1
+	fi
+
+	printf "%u" "${RANDOM_SEED}"
+}
+
 submitJob()
 {
-	local JOB_NAME OUT_MSMC_PFX INPUT_MULTIHETSEPS
+	local JOB_NAME RANDOM_SEED BOOTSTRAP_REPS NUM_SEQS OUT_MSMC_PFX INPUT_MULTIHETSEPS
 	JOB_NAME="${1}"
-	OUT_MSMC_PFX="${2}"
-	shift 2
+	RANDOM_SEED="${2}"
+	BOOTSTRAP_REPS="${3}"
+	NUM_SEQS="${4}"
+	OUT_DIR_PFX="${5}"
+	shift 5
 	INPUT_MULTIHETSEPS=("${@}")
 
-	echo sbatch \
+	sbatch \
 		-J ${JOB_NAME} \
-		--signal=B:USR1@300 \
+		--signal=B:USR1@60 \
 		--time=0-01:00:00 \
-		--ntasks=4 \
+		--ntasks=1 \
 		--nodes=1 \
-		--mem=4G \
+		--mem=1G \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
-		${SCRIPTS_DIR}/09-msmc.slurm \
-		"${OUT_MSMC_PFX}" \
+		${SCRIPTS_DIR}/11-multihetsepBootstrapPrep.slurm \
+		"${RANDOM_SEED}" \
+		"${BOOTSTRAP_REPS}" \
+		"${NUM_SEQS}" \
+		"${OUT_DIR_PFX}" \
 		"${INPUT_MULTIHETSEPS[@]}"
 }
 
@@ -48,20 +86,27 @@ submitJob()
 # define key variables
 SPECIES="bft"
 PROJECT="${SPECIES}-msmc"
+BOOTSTRAP_REPS=20
+NUM_SEQS=30 # the number of "chromosomes" output per rep
+SEED_FILE="data/random_seed-bootstrap.txt"
+RANDOM_SEED=`getRandomSeed "${SEED_FILE}"`
 ASSEMBLY_FAI="data/assembly/asm_long.fa.fai" # only necessary for presence of input data
 ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}" # only necessary for presence of input data
 INPUT_DIR="data/multihetseps"
 INPUT_SFX=".multihetsep.txt"
-OUTPUT_PFX="data/msmc/msmc"
+OUTPUT_DIR="data/multihetseps/bootstrap"
+OUTPUT_PFX="${OUTPUT_DIR}/bootstrap-rnd"
+OUTPUT_MFX="bootstrap_multihetsep.chr" # this cannot be changed, it is hardcoded into msmc-tools. MFX is made up: midfix (think prefix and suffix). The output files will be ${PFX}${i}/${MFX}${j}${SFX}, where i is 1..${BOOTSTRAP_REPS} and j is 1..${NUM_SEQS}
+OUTPUT_SFX=".txt" # this cannot be changed, it is hardcoded into msmc-tools
 
-#declare -a INPUT_FILES=($(find "${INPUT_DIR}" -maxdepth 1 -type f -name '*'"${INPUT_SFX}" -printf '%f ')) # <-- get input files from `find' command (assumes all needed files exist)
+# check for existence of needed input files
+#declare -a INPUT_FILES=($(find "${INPUT_DIR}" -mindepth 2 -type f -name '*'"${INPUT_SFX}" -printf '%f ')) # <-- get input files from `find' command (assumes all needed files exist)
 declare -a INPUT_FILES=( $(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}" | sed -r 's,^(.+)$,'"${INPUT_DIR}"'/\1'"${INPUT_SFX}"',' | tr '\n' ' ') ) # <-- get input files from list of sequence IDs (enables checking of input files existence)
-declare -a OUTPUT_FILES=("${OUTPUT_PFX}".{log,{final,loop}.txt})
+declare -a OUTPUT_FILES=( `eval echo "${OUTPUT_PFX}"{1..${BOOTSTRAP_REPS}}/"${OUTPUT_MFX}"{1..${NUM_SEQS}}"${OUTPUT_SFX}"` )
 OUTPUT_DIR=$(readlink -n -m `dirname "${OUTPUT_PFX}"`)
 
 EXIT_EARLY=0
 
-# check for existence of needed input files
 for INPUT_FILE in "${INPUT_FILES[@]}"
 do
 	if [ ! -e "${INPUT_FILE}" ]
@@ -102,12 +147,12 @@ mkdir -p "${OUTPUT_DIR}" &> /dev/null
 # ####################### #
 # actually submit the job #
 # ####################### #
-HPC_JOB_NAME="${PROJECT}_msmc"
+HPC_JOB_NAME="${PROJECT}_multihetsepBootstrapPrep"
 submitJob \
 	"${HPC_JOB_NAME}" \
+	"${RANDOM_SEED}" \
+	"${BOOTSTRAP_REPS}" \
+	"${NUM_SEQS}" \
 	"${OUTPUT_PFX}" \
 	"${INPUT_FILES[@]}"
-
-# Bonefish
-# 39828452. 0-00:20:33. 80% (3.2/4) CPU. 5% (3/64 GB) RAM.
 
