@@ -27,7 +27,7 @@ submitJob()
 	shift 2
 	INPUT_MULTIHETSEPS=("${@}")
 
-	echo sbatch \
+	sbatch \
 		-J ${JOB_NAME} \
 		--signal=B:USR1@300 \
 		--time=0-01:00:00 \
