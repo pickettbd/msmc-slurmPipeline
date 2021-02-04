@@ -108,6 +108,6 @@ submitJob \
 	"${OUTPUT_PFX}" \
 	"${INPUT_FILES[@]}"
 
-# Bonefish
+# Bluefin Trevally
 # 39828452. 0-00:20:33. 80% (3.2/4) CPU. 5% (3/64 GB) RAM.
 
