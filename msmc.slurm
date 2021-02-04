@@ -132,6 +132,7 @@ unset OUTPUT_DIR
 time msmc \
 	-t "${SLURM_NTASKS}" \
 	-R \
+	-p '1*2+16*1+1*2' \
 	-o "${OUTPUT_MSMC_PFX}" \
 	"${INPUT_MULTIHETSEP_FILES[@]}" &
 
