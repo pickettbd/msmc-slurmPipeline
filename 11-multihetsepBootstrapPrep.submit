@@ -65,7 +65,7 @@ submitJob()
 	sbatch \
 		-J ${JOB_NAME} \
 		--signal=B:USR1@60 \
-		--time=0-01:00:00 \
+		--time=0-02:00:00 \
 		--ntasks=1 \
 		--nodes=1 \
 		--mem=1G \
@@ -86,7 +86,7 @@ submitJob()
 # define key variables
 SPECIES="bft"
 PROJECT="${SPECIES}-msmc"
-BOOTSTRAP_REPS=20
+BOOTSTRAP_REPS=1000
 NUM_SEQS=30 # the number of "chromosomes" output per rep
 SEED_FILE="data/random_seed-bootstrap.txt"
 RANDOM_SEED=`getRandomSeed "${SEED_FILE}"`

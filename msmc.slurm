@@ -61,7 +61,7 @@ cleanup()
 
 	# move successful/failed job files to the correct place
 	local SUCCESS_FAIL_STATUS_SUBDIR
-	SUCCESS_FAIL_STATUS_SUBDIR="${1:=success}"
+	SUCCESS_FAIL_STATUS_SUBDIR="${1:-success}"
 
 	mv ${SLURM_SUBMIT_DIR}/job_files/${SLURM_JOB_NAME}__${SLURM_ARRAY_JOB_ID}-${SLURM_ARRAY_TASK_ID}.{err,out} ${SLURM_SUBMIT_DIR}/job_files/${SUCCESS_FAIL_STATUS_SUBDIR} &> /dev/null
 	mv ${SLURM_SUBMIT_DIR}/job_files/${SLURM_JOB_NAME}__${SLURM_JOB_ID}.{err,out} ${SLURM_SUBMIT_DIR}/job_files/${SUCCESS_FAIL_STATUS_SUBDIR} &> /dev/null

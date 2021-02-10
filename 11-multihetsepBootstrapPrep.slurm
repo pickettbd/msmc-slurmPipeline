@@ -61,7 +61,7 @@ cleanup()
 
 	# move successful/failed job files to the correct place
 	local SUCCESS_FAIL_STATUS_SUBDIR
-	SUCCESS_FAIL_STATUS_SUBDIR="${1:=success}"
+	SUCCESS_FAIL_STATUS_SUBDIR="${1:-success}"
 
 	mv ${SLURM_SUBMIT_DIR}/job_files/${SLURM_JOB_NAME}__${SLURM_ARRAY_JOB_ID}-${SLURM_ARRAY_TASK_ID}.{err,out} ${SLURM_SUBMIT_DIR}/job_files/${SUCCESS_FAIL_STATUS_SUBDIR} &> /dev/null
 	mv ${SLURM_SUBMIT_DIR}/job_files/${SLURM_JOB_NAME}__${SLURM_JOB_ID}.{err,out} ${SLURM_SUBMIT_DIR}/job_files/${SUCCESS_FAIL_STATUS_SUBDIR} &> /dev/null
@@ -128,8 +128,8 @@ mkdir -p "${OUTPUT_DIR}" &> /dev/null
 #	run the program of interest
 time multihetsep_bootstrap.py \
 	--nr_bootstraps ${BOOTSTRAP_REPS} \
-	--chunk_size 5000000 \
-	--chunks_per_chromosome 20 \
+	--chunk_size 500000 \
+	--chunks_per_chromosome 42 \
 	--nr_chromosomes ${NUM_SEQS} \
 	--seed "${RANDOM_SEED}" \
 	"${OUTPUT_DIR_PFX}" \

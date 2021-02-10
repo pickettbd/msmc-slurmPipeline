@@ -19,6 +19,19 @@ CWD_check()
 }
 CWD_check
 
+cleanup()
+{
+	rm -f "${JOB_LIST}" &> /dev/null
+}
+
+control_c()
+{
+	cleanup
+	exit 1
+}
+
+trap control_c SIGINT
+
 submitJob()
 {
 	local JOB_NAME OUT_MSMC_PFX INPUT_MULTIHETSEPS
@@ -34,6 +47,7 @@ submitJob()
 		--ntasks=4 \
 		--nodes=1 \
 		--mem=12G \
+		"${DEPENDENCY}" \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
 		${SCRIPTS_DIR}/12-msmcBootstrap.slurm \
@@ -52,6 +66,13 @@ INPUT_BASE_DIR="data/multihetseps/bootstrap"
 OUTPUT_BASE_DIR="data/msmc/bootstrap"
 INPUT_PFX="bootstrap_multihetsep.chr"
 INPUT_SFX=".txt"
+
+# limit number of jobs running at once (for I/O reasons)
+JOB_LIST=/tmp/$(whoami)-${$}.list
+COUNTER=0
+JOB_LIMIT=300
+JOB_CAP=${JOB_LIMIT}
+DEPENDENCY=''
 
 INPUT_DIRS=($(find "${INPUT_BASE_DIR}" -maxdepth 1 -type d -name 'round*' | sort -V))
 
@@ -97,6 +118,17 @@ do
 
 	if [ ${SKIP} -eq 0 ]
 	then
+		# increment counter
+		COUNTER=$((${COUNTER}+1))
+
+		# set dependency
+		if [ ${COUNTER} -ge ${JOB_CAP} ]
+		then
+			DEPENDENCY=`tail -n ${JOB_LIMIT} "${JOB_LIST}" | tr '\n' ':' | sed -r 's,:$,,'`
+			DEPENDENCY="-d afterany:${DEPENDENCY}"
+			JOB_CAP=$((${JOB_CAP}+${JOB_LIMIT}))
+		fi
+
 		# create output dir (if needed)
 		mkdir -p "${OUTPUT_DIR}" &> /dev/null
 
@@ -107,12 +139,16 @@ do
 		submitJob \
 			"${HPC_JOB_NAME}" \
 			"${OUTPUT_PFX}" \
-			"${INPUT_FILES[@]}"
+			"${INPUT_FILES[@]}" \
+			| grep -Eo '[0-9]+' \
+			>> "${JOB_LIST}"
 	fi
 	
 	unset SKIP INPUT_FILES OUTPUT_FILES OUTPUT_DIR OUTPUT_PFX LAST_DIR_COMPONENT i
 
 done # end for loop through INPUT_DIRS
+
+cleanup
 
 # bluefin trevally
 # 39828452. 0-00:20:33. 80% (3.2/4) CPU. 5% (3/64 GB) RAM. ("regular", i.e., not-bootstrapped)
