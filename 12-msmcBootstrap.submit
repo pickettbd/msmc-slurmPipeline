@@ -43,11 +43,11 @@ submitJob()
 	sbatch \
 		-J ${JOB_NAME} \
 		--signal=B:USR1@300 \
-		--time=0-01:30:00 \
+		--time=0-00:15:00 \
 		--ntasks=4 \
 		--nodes=1 \
-		--mem=12G \
-		"${DEPENDENCY}" \
+		--mem=4G \
+		${DEPENDENCY} \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
 		${SCRIPTS_DIR}/12-msmcBootstrap.slurm \
@@ -74,7 +74,7 @@ JOB_LIMIT=300
 JOB_CAP=${JOB_LIMIT}
 DEPENDENCY=''
 
-INPUT_DIRS=($(find "${INPUT_BASE_DIR}" -maxdepth 1 -type d -name 'round*' | sort -V))
+INPUT_DIRS=($(find -H "${INPUT_BASE_DIR}" -maxdepth 1 -type d -name 'round*' | sort -V))
 
 for INPUT_DIR in "${INPUT_DIRS[@]}"
 do
@@ -154,4 +154,5 @@ cleanup
 # 39828452. 0-00:20:33. 80% (3.2/4) CPU. 5% (3/64 GB) RAM. ("regular", i.e., not-bootstrapped)
 # 39874466. 0-00:56:03. 91% (3+/4) CPU. 68% (<12/16 GB) RAM. (bootstrapped to 3Gbp genome (this is an example, 3 others looked just like this))
 # 39876365. 0-00:54:34. 90% (3+/4) CPU. 88% (12 GB) RAM. (bootstrapped to 3Gbp genome (this is an example, 15 others looked just like this))
+# 39993055. 0-00:08:49. 82% (3+/4) CPU. 18% (<3/12 GB) RAM. (bootstrapped to 630Mbp genome (this is an example, 999 others looked just like this))
 
