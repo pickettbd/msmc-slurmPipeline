@@ -129,7 +129,7 @@ mkdir -p "${OUTPUT_DIR}" &> /dev/null
 time multihetsep_bootstrap.py \
 	--nr_bootstraps ${BOOTSTRAP_REPS} \
 	--chunk_size 500000 \
-	--chunks_per_chromosome 42 \
+	--chunks_per_chromosome 52 \
 	--nr_chromosomes ${NUM_SEQS} \
 	--seed "${RANDOM_SEED}" \
 	"${OUTPUT_DIR_PFX}" \

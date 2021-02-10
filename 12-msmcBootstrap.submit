@@ -50,7 +50,7 @@ submitJob()
 		${DEPENDENCY} \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
-		${SCRIPTS_DIR}/12-msmcBootstrap.slurm \
+		${SCRIPTS_DIR}/msmcBootstrap.slurm \
 		"${OUT_MSMC_PFX}" \
 		"${INPUT_MULTIHETSEPS[@]}"
 }
