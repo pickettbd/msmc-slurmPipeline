@@ -1,0 +1,183 @@
+#! /bin/bash
+
+# Ensure we're running from the correct location
+CWD_check()
+{
+	#local SCRIPTS_DIR
+	local MAIN_DIR
+	local RUN_DIR
+
+	SCRIPTS_DIR=$(readlink -f `dirname "${BASH_SOURCE[0]}"`)
+	MAIN_DIR=$(readlink -f `dirname "${SCRIPTS_DIR}/"`)
+	RUN_DIR=$(readlink -f .)
+
+	if [ "${RUN_DIR}" != "${MAIN_DIR}" ] || ! [[ "${SCRIPTS_DIR}" =~ ^"${MAIN_DIR}"/scripts.* ]]
+	then
+		printf "\n\t%s\n\t%s\n\n" "Script must be run from ${MAIN_DIR}" "You are currently at:   ${RUN_DIR}" 1>&2
+		exit 1
+	fi
+}
+CWD_check
+
+submitJob()
+{
+	local JOB_NAME OUTPUT_FILE SNPABLE_FILE INPUT_FILES
+	JOB_NAME="${1}"
+	OUTPUT_FILE="${2}"
+	SNPABLE_FILE="${3}"
+	shift 3
+	INPUT_FILES=("${@}")
+
+	sbatch \
+		-J ${JOB_NAME} \
+		--signal=B:USR1@300 \
+		--time=0-01:00:00 \
+		--ntasks=1 \
+		--nodes=1 \
+		--mem=1G \
+		-o job_files/%x__%j.out \
+		-e job_files/%x__%j.err \
+		${SCRIPTS_DIR}/08-multihetsep.slurm \
+		"${OUTPUT_FILE}" \
+		"${SNPABLE_FILE}" \
+		"${INPUT_FILES[@]}"
+}
+
+# ###################################### #
+# sanity check on input and output files #
+# ###################################### #
+
+# define key variables
+SPECIES="bft"
+PROJECT="${SPECIES}-msmc"
+ASSEMBLY_FAI="data/assembly/asm_long.fa.fai"
+ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}"
+SAMPLE_LIST="data/samples.list"
+INPUT_DIR="data/masks"
+BED_SFX=".bed.gz"
+VCF_SFX=".vcf.gz"
+SNPABLE_DIR="data/snpable"
+SNPABLE_PFX="mask_35_50_"
+SNPABLE_SFX=".fa.gz"
+OUTPUT_SFX=".multihetsep.txt"
+OUTPUT_DIR="data/multihetseps"
+
+NUM_SAMPLES=`cat "${SAMPLE_LIST}" | wc -l`
+
+declare -a SKIPPED
+declare -a COMPLETED
+declare -a UNSTARTED
+declare -a STARTED
+declare -a NEEDED_INPUT_FILES
+declare -a ALREADY_EXIST_OUTPUT_FILES
+
+while read SCAFFOLD_NAME
+do
+	SKIP=0
+	MISSING_INPUT=0
+	EXISTING_OUTPUT=0
+
+	MULTIHETSEP_FILE="${OUTPUT_DIR}/${SCAFFOLD_NAME}${OUTPUT_SFX}"
+	OUTPUT_FILES=("${MULTIHETSEP_FILE}")
+
+	declare -a INPUT_FILES
+	while read SAMPLE
+	do
+		BED_FILE="${INPUT_DIR}/mask_${SAMPLE}_${SCAFFOLD_NAME}${BED_SFX}"
+		VCF_FILE="${INPUT_DIR}/mask_${SAMPLE}_${SCAFFOLD_NAME}${VCF_SFX}"
+
+		INPUT_FILES+=("${BED_FILE}" "${VCF_FILE}")
+
+	done < "${SAMPLE_LIST}"
+
+	# check for existence of needed input files
+	for INPUT_FILE in "${INPUT_FILES[@]}"
+	do
+		if [ ! -e "${INPUT_FILE}" ]
+		then
+			NEEDED_INPUT_FILES+=("${INPUT_FILE}")
+			MISSING_INPUT=1
+			SKIP=1
+		fi
+	done
+
+	# check for the existence of output files
+	for OUTPUT_FILE in "${OUTPUT_FILES[@]}"
+	do
+		if [ -e "${OUTPUT_FILE}" ]
+		then
+			ALREADY_EXIST_OUTPUT_FILES+=("${OUTPUT_FILE}")
+			EXISTING_OUTPUT=1
+			SKIP=1
+		fi
+	done
+
+	# check for the existence of the SNPable file (if needed because there is more than one sample)
+	SNPABLE_FILE="${SNPABLE_DIR}/${SNPABLE_PFX}${SCAFFOLD_NAME}${SNPABLE_SFX}"
+	if [ ${NUM_SAMPLES} -gt 1 ]
+	then
+		if [ ! -e "${SNPABLE_FILE}" ]
+		then
+			NEEDED_INPUT_FILES+=("${SNPABLE_FILE}")
+			MISSING_INPUT=1
+			SKIP=1
+		fi
+	else
+		SNPABLE_FILE="NA" # special value to tell the slurm script to NOT include a SNPable mask
+	fi
+
+
+	# submit the job for this scaffold, or skip it, depending on which files exist
+	if [ $SKIP -eq 0 ]
+	then
+		# create output dir (if needed)
+		mkdir -p "${OUTPUT_DIR}" &> /dev/null
+
+		# ####################### #
+		# actually submit the job #
+		# ####################### #
+		HPC_JOB_NAME="${PROJECT}_multihetsep_${SCAFFOLD_NAME}"
+		submitJob \
+			"${HPC_JOB_NAME}" \
+			"${MULTIHETSEP_FILE}" \
+			"${SNPABLE_FILE}" \
+			"${INPUT_FILES[@]}"
+
+		STARTED+=("${SCAFFOLD_NAME}")
+
+	else
+		SKIPPED+=("${SCAFFOLD_NAME}")
+
+		if [ ${MISSING_INPUT} -ne 0 ]
+		then
+			UNSTARTED+=("${SCAFFOLD_NAME}")
+		fi
+
+		if [ ${EXISTING_OUTPUT} -ne 0 ]
+		then
+			COMPLETED+=("${SCAFFOLD_NAME}")
+		fi
+	fi
+	unset SKIP MISSING_INPUT EXISTING_OUTPUT
+
+done < <(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}" | sort -V)
+
+# report on which jobs were successfully submitted or not and why
+printf "%s " "The following scaffolds were submitted for jobs:" "${STARTED[@]}" 1>&2
+printf "\n" 1>&2
+
+printf "%s " "The following scaffolds were skipped for some reason, thus we did not submit a job:" "${SKIPPED[@]}" 1>&2
+printf "\n" 1>&2
+
+printf "%s " "The following scaffolds were skipped because they were already completed:" "${COMPLETED[@]}" 1>&2
+printf "\n" 1>&2
+printf "%s\n" "To re-run the already completed jobs, please delete the output files for each job you wish to re-run. To re-run ALL the already completed jobs, you would need to run these commands:" 1>&2
+printf "\trm -f %s\n" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+
+printf "%s " "The following scaffolds were skipped because one or more input files did not exist:" "${UNSTARTED[@]}" 1>&2
+printf "\n" 1>&2
+printf "%s\n" "To start jobs for these scaffolds, please create the needed input files by running the previous steps to completion. Here is a list of all the files that should (but do not!) exist:" 1>&2
+printf "\t%s\n" "${NEEDED_INPUT_FILES[@]}" 1>&2
+printf "\n" 1>&2
+
+

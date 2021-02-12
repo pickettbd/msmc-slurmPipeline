@@ -28,6 +28,7 @@ The project assumes they are availble via system modules (e.g., Tcl or Lua), but
 - [Python](https://python.org) (v3.9.0): Programming language (v3.6+ required)
 
 ## Notes
+This pipeline does not support file names or paths that have whitespace in them.
 This pipeline must be run for every individual separately.  
 If multiple individuals exist, this pipeline could be revised to run on one or more individuals, but only a single individual is currently supported.
 If multiple individuals do exist, a [SNPable](http://lh3lh3.users.sourceforge.net/snpable.shtml) mask must also be made.

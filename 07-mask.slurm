@@ -190,7 +190,7 @@ dotlockfile -u "${SLURM_SUBMIT_DIR}/.cleanup.tsv.lock"
 TMP_OUT_BED="${WORK_DIR}/`basename ${OUT_MASK_BED_GZ}`"
 TMP_OUT_VCF="${WORK_DIR}/`basename ${OUT_MASK_VCF_GZ}`"
 
-#	run the program of interest (4+ threads ideal: (1) bcftools mpileup, (2) bcftools call, (3) bamCaller.py, & (4) bzip
+#	run the program of interest (4+ threads ideal: (1) bcftools mpileup, (2) bcftools call, (3) bamCaller.py, & (4) gzip
 set -o pipefail
 bcftools mpileup --threads "${MPILEUP_EXTRA_THREADS}" -B -q 20 -C 0 -r ${ASM_SEQ_ID} -f "${ASM_FA}" "${ALN_BAM}" \
 	| bcftools call --threads "${MPILEUP_EXTRA_THREADS}" -c -V indels \

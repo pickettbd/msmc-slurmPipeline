@@ -42,7 +42,7 @@ submitJob()
 
 	sbatch \
 		-J ${JOB_NAME} \
-		--signal=B:USR1@300 \
+		--signal=B:USR1@60 \
 		--time=0-00:15:00 \
 		--ntasks=4 \
 		--nodes=1 \
@@ -50,7 +50,7 @@ submitJob()
 		${DEPENDENCY} \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
-		${SCRIPTS_DIR}/msmcBootstrap.slurm \
+		${SCRIPTS_DIR}/msmc.slurm \
 		"${OUT_MSMC_PFX}" \
 		"${INPUT_MULTIHETSEPS[@]}"
 }
@@ -142,6 +142,7 @@ do
 			"${INPUT_FILES[@]}" \
 			| grep -Eo '[0-9]+' \
 			>> "${JOB_LIST}"
+		printf "Bootstrap #%u:%u\n" "${i}" `tail -n 1 "${JOB_LIST}"` 1>&2
 	fi
 	
 	unset SKIP INPUT_FILES OUTPUT_FILES OUTPUT_DIR OUTPUT_PFX LAST_DIR_COMPONENT i
