@@ -20,7 +20,9 @@ The alignments can be performed with a tool like [minimap2](https://github.com/l
 
 ## Software Dependencies
 These scripts assume a [GNU](https://www.gnu.org) [bash](https://www.gnu.org/software/bash) shell and cluster job submission controlled by [SLURM](https://slurm.schedmd.com).
-The following tools are assumed to be installed on your machine with the executables available in your $PATH.  
+Usage of `sed`, `awk`, `grep`, `printf`, `find`, etc. are assumed to be the GNU version instead of basic BSD or other POSIX-based version without GNU extensions.
+If your environment does not meet this assumption, please adjust the scripts accordingly.
+The following tools are assumed to be installed on your machine with the executables available in your `$PATH`.
 The project assumes they are availble via system modules (e.g., Tcl or Lua), but removing the `module purge` and `module load _____` commands would remove the dependency on system modules.
 - [MSMC](https://github.com/stschiff/msmc) (v1.1.0): Implementation of the multiple sequential markovian coalescent 
 - [msmc-tools](https://github.com/stschiff/msmc-tools) (commit 123791f): Tools and Utilities for msmc and msmc2 
@@ -29,7 +31,6 @@ The project assumes they are availble via system modules (e.g., Tcl or Lua), but
 
 ## Notes
 This pipeline does not support file names or paths that have whitespace in them.
-This pipeline must be run for every individual separately.  
-If multiple individuals exist, this pipeline could be revised to run on one or more individuals, but only a single individual is currently supported.
+This pipeline may be run for a single individual or multiple individuals of the same species. The assumption is that they share the same "reference" genome.
 If multiple individuals do exist, a [SNPable](http://lh3lh3.users.sourceforge.net/snpable.shtml) mask must also be made.
 

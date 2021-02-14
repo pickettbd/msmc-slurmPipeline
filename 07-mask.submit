@@ -102,122 +102,246 @@ submitJob()
 # ###################################### #
 
 # define key variables
+DEBUG=0 # 0: False, 1: True
 SPECIES="bft"
 PROJECT="${SPECIES}-msmc"
-ASSEMBLY_FA="data/assembly/asm_long.fa"
-ASSEMBLY_FAI="data/assembly/asm_long.fa.fai"
-ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}"
-ALIGNMENT_BAM="data/alns/pacbio-reads_x_asm-long.bam"
-ALIGNMENT_BAI="${ALIGNMENT_BAM}.bai"
-AVE_DEPTHS_FILE="data/alns/approx_depth.txt"
+
+JOBS_TO_RUN_AT_ONE_TIME=100 # total across all samples
+JOBS_TO_RUN_AT_ONE_TIME_PER_SAMPLE=${JOBS_TO_RUN_AT_ONE_TIME} # default value if only one sample
+
 OUTPUT_PFX="data/masks/mask_"
+OUTPUT_DIR=$(readlink -n -m `dirname "${OUTPUT_PFX}"`)
 OUT_BED_SFX=".bed.gz"
 OUT_VCF_SFX=".vcf.gz"
-JOBS_TO_RUN_AT_ONE_TIME=100
 
-declare -a INPUT_FILES=("${ASSEMBLY_FA}" "${ALIGNMENT_BAM}" "${ALIGNMENT_BAI}" "${AVE_DEPTHS_FILE}")
-OUTPUT_DIR=$(readlink -n -m `dirname "${OUTPUT_PFX}"`)
+SAMPLE_LIST="data/samples.list"
+ASSEMBLY_FA="data/assembly/asm_long.fa"
+ASSEMBLY_FAI="${ASSEMBLY_FA}.fai"
+ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}"
 
-EXIT_EARLY=0
-
-# check for existence of needed input files
+# check for the presence of input files that are not sample-specific
+declare -a INPUT_FILES=("${ASSEMBLY_FA}" "${ASSEMBLY_FAI}" "${SAMPLE_FILE}")
 for INPUT_FILE in "${INPUT_FILES[@]}"
 do
 	if [ ! -e "${INPUT_FILE}" ]
 	then
-		printf "%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" 1>&2
-		EXIT_EARLY=1
+		printf "%s\n\t%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" "None of the samples can be run without this file." 1>&2
+		exit 1
 	fi
 done
 unset INPUT_FILES
 
-# exit without submitting the job, if needed
-if [ $EXIT_EARLY -ne 0 ]
-then
-	exit ${EXIT_EARLY}
-fi
-unset EXIT_EARLY
-
-# read in the average depth
-AVE_DEPTH=`cat "${AVE_DEPTHS_FILE}" | tr -d '\n'`
-
 # create output dir (if needed)
 mkdir -p "${OUTPUT_DIR}" &> /dev/null
 
-# loop through asm seqids to find output files
-declare -a TO_RUN
-declare -a ALREADY_FINISHED
-declare -a ALREADY_FINISHED_FILES
-declare -a ATTEMPTED
-COUNTER=1
-while read SEQID
-do
-	BED="${OUTPUT_PFX}${SEQID}${OUT_BED_SFX}"
-	VCF="${OUTPUT_PFX}${SEQID}${OUT_VCF_SFX}"
-	BED_OK="${BED}.ok"
-	VCF_OK="${VCF}.ok"
-
-	if [[ -e "${BED}" ]] && [[ -e "${VCF}" ]] && [[ -e "${BED_OK}" ]] && [[ -e "${VCF_OK}" ]]
+# calculate number of jobs to run at once _per sample_
+NUM_SAMPLES=`cat "${SAMPLES_LIST}" | wc -l`
+if [ "${NUM_SAMPLES}" -gt 1 ]
+then
+	if [ "${NUM_SAMPLES}" -ge ${JOBS_TO_RUN_AT_ONE_TIME} ]
 	then
-		if [[ -e "${BED_OK}" ]] && [[ -e "${VCF_OK}" ]]
-		then
-			ALREADY_FINISHED+=("${COUNTER}")
-			ALREADY_FINISHED_FILES+=("${BED}" "${BED_OK}" "${VCF}" "${VCF_OK}")
-		else
-			rm -f "${BED}" "${VCF}" "${BED_OK}" "${VCF_OK}" &> /dev/null
-			TO_RUN+=("${COUNTER}")
-			ATTEMPTED+=("${COUNTER}")
-		fi
+		JOBS_TO_RUN_AT_ONE_TIME_PER_SAMPLE=1
 	else
-		TO_RUN+=("${COUNTER}")
+		JOBS_TO_RUN_AT_ONE_TIME_PER_SAMPLE=$(( ${JOBS_TO_RUN_AT_ONE_TIME} / ${NUM_SAMPLES} ))
+	fi
+fi
+
+# set some variables to keep track of the individual jobs (one per sample)
+declare -a STARTED # list of samples
+declare -a STARTED_RANGES # list of ranges
+declare -a MISSING_INPUT # list of samples
+declare -a NEEDED_INPUT_FILES # list of files
+declare -a RESTARTED # list of samples
+declare -a RESTARTED_RANGES # list of ranges
+declare -a FINISHED # list of samples
+declare -a FINISHED_RANGES # list of ranges (only the finished ones from samples that had to be restarted, not 100% completed samples)
+declare -a COMPLETED # list of samples
+
+while read SAMPLE
+do
+	SKIP=0
+
+	ALIGNMENT_BAM="data/alns/${SAMPLE}_pacbio-reads_x_asm-long.bam"
+	ALIGNMENT_BAI="${ALIGNMENT_BAM}.bai"
+	AVE_DEPTHS_FILE="data/alns/${SAMPLE}_approx-depth.txt"
+	SAMPLE_OUTPUT_PFX="${OUTPUT_PFX}${SAMPLE}_"
+
+	declare -a INPUT_FILES=("${ALIGNMENT_BAM}" "${ALIGNMENT_BAI}" "${AVE_DEPTHS_FILE}")
+
+	# check for existence of needed input files
+	for INPUT_FILE in "${INPUT_FILES[@]}"
+	do
+		if [ ! -e "${INPUT_FILE}" ]
+		then
+			SKIP=1
+			MISSING_INPUT+=("${SAMPLE}")
+			NEEDED_INPUT_FILES+=("${INPUT_FILE}")
+		fi
+	done
+	unset INPUT_FILES
+
+	# read in the average depth
+	AVE_DEPTH=`cat "${AVE_DEPTHS_FILE}" | tr -d '\n'`
+
+	# loop through asm seqids to find output files
+	declare -a TO_RUN
+	declare -a ALREADY_FINISHED
+	declare -a ALREADY_FINISHED_FILES
+	declare -a ATTEMPTED
+	COUNTER=1
+	while read SEQID
+	do
+		BED="${SAMPLE_OUTPUT_PFX}${SEQID}${OUT_BED_SFX}"
+		VCF="${SAMPLE_OUTPUT_PFX}${SEQID}${OUT_VCF_SFX}"
+		BED_OK="${BED}.ok"
+		VCF_OK="${VCF}.ok"
+
+		if [[ -e "${BED}" ]] || [[ -e "${VCF}" ]] || [[ -e "${BED_OK}" ]] || [[ -e "${VCF_OK}" ]]
+		then
+			if [[ -e "${BED_OK}" ]] && [[ -e "${VCF_OK}" ]]
+			then
+				ALREADY_FINISHED+=("${COUNTER}")
+				ALREADY_FINISHED_FILES+=("${BED}" "${BED_OK}" "${VCF}" "${VCF_OK}")
+			else
+				rm -f "${BED}" "${VCF}" "${BED_OK}" "${VCF_OK}" &> /dev/null
+				TO_RUN+=("${COUNTER}")
+				ATTEMPTED+=("${COUNTER}")
+			fi
+		else
+			TO_RUN+=("${COUNTER}")
+		fi
+
+		COUNTER=$((${COUNTER}+1))
+
+	done < <(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}")
+
+	# set to skip job submission if range is empty
+	if [ ${#TO_RUN[@]} -eq 0 ]
+	then
+		SKIP=1
+		COMPLETED+=("${SAMPLE}")
+	else
+		STARTED+=("${SAMPLE}")
+
+		# report on attempted / restarted
+		if [ ${#ATTEMPTED[@]} -ne 0 ]
+		then
+			RANGE=`rangify "${ATTEMPTED[@]}"`
+			if [ ${DEBUG} -eq 1 ]
+			then
+				printf "%s\n" "INFO: ${RANGE} has/have been attempted (1+ output files existed, but it hadn't" "finished running). These files were deleted so we could try again." 1>&2
+			fi
+			RESTARTED+=("${SAMPLE}")
+			RESTARTED_RANGES+=("${RANGE}")
+			unset RANGE
+		fi
+
+		# report on finished
+		if [ ${#ALREADY_FINISHED[@]} -ne 0 ]
+		then
+			RANGE=`rangify "${ALREADY_FINISHED[@]}"`
+			if [ ${DEBUG} -eq 1 ]
+			then
+				printf "%s\n" "INFO: ${RANGE} has/have already finished. We will skip it/them. To run them" "instead, first execute:" 1>&2
+				printf "\t%s " "rm -f" 1>&2
+				printf '"%s" ' "${ALREADY_FINISHED_FILES[@]}" 1>&2
+				printf "\n" 1>&2
+			fi
+			FINISHED+=("${SAMPLE}")
+			FINISHED_RANGES+=("${RANGE}")
+			unset RANGE
+		fi
 	fi
 
-	COUNTER=$((${COUNTER}+1))
+	# submit or skip
+	if [ ${SKIP} -eq 0 ]
+	then
+		# create array submission ranges string
+		ARRAY_RANGE=`rangify "${TO_RUN[@]}"`
 
-done < <(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}")
+		STARTED+=("${SAMPLE}")
+		STARTED_RANGES+=("${ARRAY_RANGE}")
 
-# skip job submission if range is empty
-if [ ${#TO_RUN[@]} -eq 0 ]
+		# ####################### #
+		# actually submit the job #
+		# ####################### #
+		HPC_JOB_NAME="${PROJECT}_mask_${SAMPLE}"
+		submitJob \
+			"${HPC_JOB_NAME}" \
+			"${ASSEMBLY_FA}" \
+			"${ALIGNMENT_BAM}" \
+			"${AVE_DEPTH}" \
+			"${ASSEMBLY_SEQIDS}" \
+			"${SAMPLE_OUTPUT_PFX}" \
+			"${ARRAY_RANGE}" \
+			"${JOBS_TO_RUN_AT_ONE_TIME_PER_SAMPLE}"
+	else
+		if [ ${DEBUG} -eq 1 ]
+		then
+			printf "%s\n" "INFO: No job was submitted for ${SAMPLE}." 1>&2
+		fi
+	fi
+	unset SKIP TO_RUN ALREADY_FINISHED ALREADY_FINISHED_FILES ATTEMPTED ALIGNMENT_BAM ALIGNMENT_BAI AVE_DEPTHS_FILE HPC_JOB_NAME
+
+done < "${SAMPLES_LIST}" # end of: while read SAMPLE
+
+# ############## #
+#     REPORT     #
+# ############## #
+
+# remove duplicates
+MISSING_INPUT=(`printf '%s\n' "${MISSING_INPUT[@]}" | uniq | tr '\n' ' '`) # order preserved, assumes duplicates will always be adjacent
+
+# report
+#	completed
+if [ ${#COMPLETED[@]} -gt 0 ]
 then
-	printf "%s\n" "No jobs to run- all completed." 1>&2
-	exit 0
+	printf "%s\n" "The following samples had already been completed, thus no jobs were submitted:" 1>&2
+	printf "\t%s\n" "${COMPLETED[@]}" 1>&2
+	printf "\n%s\n" "####################" 1>&2
 fi
 
-# report on attempted
-if [ ${#ATTEMPTED[@]} -ne 0 ]
+#	unstarted
+if [ ${#MISSING_INPUT[@]} -gt 0 ]
 then
-	RANGE=`rangify "${ATTEMPTED[@]}"`
-	printf "%s\n" "INFO: ${RANGE} has/have been attempted (1+ output files existed, but it hadn't" "finished running). These files were deleted so we could try again." 1>&2
-	unset RANGE
+	printf "%s\n" "The following samples were not started because they were missing one or more input file:" 1>&2
+	printf "\t%s\n" "${MISSING_INPUT[@]}" 1>&2
+	printf "%s\n" "The following is a list of the files that were missing:" 1>&2
+	printf "\t%s\n" "${MISSING_INPUT_FILES[@]}" 1>&2
+	printf "\n%s\n" "####################" 1>&2
 fi
 
-# report on finished
-if [ ${#ALREADY_FINISHED[@]} -ne 0 ]
+#	started
+if [ ${#STARTED[@]} -gt 0 ]
 then
-	RANGE=`rangify "${ALREADY_FINISHED[@]}"`
-	printf "%s\n" "INFO: ${RANGE} has/have already finished. We will skip it/them. To run them" "instead, first execute:" 1>&2
-	printf "\t%s " "rm -f" 1>&2
-	printf '"%s" ' "${ALREADY_FINISHED_FILES[@]}" 1>&2
-	printf "\n" 1>&2
-	unset RANGE
+
+	# started scaffolds for this sample
+	printf "%s\n" "The following shows which scaffolds were started for each sample:" 1>&2
+	for i in `seq 0 1 ${#STARTED[@]}`
+	do
+		printf "\t%s: %s\n" "${STARTED[${i}]}" "${STARTED_RANGES[${i}]}" 1>&2
+	done
+	printf "\n%s\n" "####################" 1>&2
+
+	# already finished scaffolds for this sample
+	if [ ${#FINISHED[@]} -gt 0 ]
+	then
+		printf "%s\n" "Of these samples that were started, the following did not have to run certain scaffolds because they had already been completed:" 1>&2
+		for i in `seq 0 1 ${#FINISHED[@]}`
+		do
+			printf "\t%s: %s\n" "${FINISHED[${i}]}" "${FINISHED_RANGES[${i}]}" 1>&2
+		done
+		printf "\n%s\n" "####################" 1>&2
+	fi
+
+	# restarted scaffolds for this sample
+	if [ ${#RESTARTED[@]} -gt 0 ]
+	then
+		printf "%s\n" "Of these samples that were started, the following had scaffolds that were previously run but did not complete successfully for some reason:" 1>&2
+		for i in `seq 0 1 ${#RESTARTED[@]}`
+		do
+			printf "\t%s: %s\n" "${RESTARTED[${i}]}" "${RESTARTED_RANGES[${i}]}" 1>&2
+		done
+		printf "\n%s\n" "####################" 1>&2
+	fi
 fi
-
-# create array submission ranges string
-ARRAY_RANGE=`rangify "${TO_RUN[@]}"`
-unset TO_RUN ALREADY_FINISHED ATTEMPTED
-
-# ####################### #
-# actually submit the job #
-# ####################### #
-HPC_JOB_NAME="${PROJECT}_mask"
-submitJob \
-	"${HPC_JOB_NAME}" \
-	"${ASSEMBLY_FA}" \
-	"${ALIGNMENT_BAM}" \
-	"${AVE_DEPTH}" \
-	"${ASSEMBLY_SEQIDS}" \
-	"${OUTPUT_PFX}" \
-	"${ARRAY_RANGE}" \
-	"${JOBS_TO_RUN_AT_ONE_TIME}"
-
-

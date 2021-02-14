@@ -173,9 +173,8 @@ printf "%s" "identifying longest seq ids..." 1>&2
 sort -t '	' -n -r -k 2 "${ASSEMBLY_FAI}" \
 	| head -n "${LONGEST_COUNT}" \
 	| cut -d '	' -f 1 \
-	> "${TMP_REGIONS}" &
+	> "${TMP_REGIONS}"
 
-wait `jobs -p`
 EXIT_CODE=$?
 printf "%s\n" "done." 1>&2
 cat "${TMP_REGIONS}" | sed -r 's,^,\t,' 1>&2

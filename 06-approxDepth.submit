@@ -61,61 +61,81 @@ submitJob()
 SPECIES="bft"
 PROJECT="${SPECIES}-msmc"
 NUM_LONG_SEQS=3
+SAMPLE_FILE="data/samples.list"
 ASSEMBLY_FAI="data/assembly/asm_long.fa.fai"
-ALIGNMENT_BAM="data/alns/pacbio-reads_x_asm-long.bam"
-ALIGNMENT_BAI="${ALIGNMENT_BAM}.bai"
-OUT_DEPTHS_TSV="data/alns/depths.tsv"
-AVE_DEPTHS="data/alns/approx_depth.txt"
-declare -a INPUT_FILES=("${ASSEMBLY_FAI}" "${ALIGNMENT_BAM}" "${ALIGNMENT_BAI}")
-declare -a OUTPUT_FILES=("${OUT_DEPTHS_TSV}" "${AVE_DEPTHS}")
 
-EXIT_EARLY=0
-
-# check for existence of needed input files
-for INPUT_FILE in "${INPUT_FILES[@]}"
-do
-	if [ ! -e "${INPUT_FILE}" ]
-	then
-		printf "%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" 1>&2
-		EXIT_EARLY=1
-	fi
-done
-unset INPUT_FILES
-
-# check for existence of needed output files
-declare -a ALREADY_EXIST_OUTPUT_FILES
-for OUTPUT_FILE in "${OUTPUT_FILES[@]}"
-do
-	if [ -e "${OUTPUT_FILE}" ]
-	then
-		ALREADY_EXIST_OUTPUT_FILES+=("${OUTPUT_FILE}")
-	fi
-done
-
-if [ "${#ALREADY_EXIST_OUTPUT_FILES[@]}" -gt 0 ]
+# check for the presence of input files that are not sample-specific
+if [ ! -e "${ASSEMBLY_FAI}" ]
 then
-	printf "%s\n" "ERROR: One or more output files already exists. To run this step, first delete them:" 1>&2
-	printf "\trm -f \"%s\"\n" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
-	EXIT_EARLY=1
+	printf "%s\n\t%s\n" "ERROR: Required input file does not exist: ${ASSEMBLY_FAI}" "None of the samples can be run without this file." 1>&2
+	exit 1
 fi
-unset ALREADY_EXIST_OUTPUT_FILES OUTPUT_FILES
 
-# exit without submitting the job, if needed
-if [ $EXIT_EARLY -ne 0 ]
+if [ ! -e "${SAMPLE_FILE}" ]
 then
-	exit ${EXIT_EARLY}
+	printf "%s\n\t%s\n" "ERROR: Required input file does not exist: ${SAMPLE_FILE}" "None of the samples can be run without this file." 1>&2
+	exit 1
 fi
-unset EXIT_EARLY
 
-# ####################### #
-# actually submit the job #
-# ####################### #
-HPC_JOB_NAME="${PROJECT}_approxDepth"
-submitJob \
-	"${HPC_JOB_NAME}" \
-	"${NUM_LONG_SEQS}" \
-	"${ASSEMBLY_FAI}" \
-	"${ALIGNMENT_BAM}" \
-	"${OUT_DEPTHS_TSV}" \
-	"${AVE_DEPTHS}"
+# process each sample
+while read SAMPLE
+do
+	SKIP=0
+
+	# set some handy variables
+	ALIGNMENT_BAM="data/alns/${SAMPLE}_pacbio-reads_x_asm-long.bam"
+	ALIGNMENT_BAI="${ALIGNMENT_BAM}.bai"
+	OUT_DEPTHS_TSV="data/alns/${SAMPLE}_depths.tsv"
+	AVE_DEPTHS="data/alns/${SAMPLE}_approx-depth.txt"
+
+	declare -a INPUT_FILES=("${ALIGNMENT_BAM}" "${ALIGNMENT_BAI}")
+	declare -a OUTPUT_FILES=("${OUT_DEPTHS_TSV}" "${AVE_DEPTHS}")
+
+	# check for existence of needed input files
+	for INPUT_FILE in "${INPUT_FILES[@]}"
+	do
+		if [ ! -e "${INPUT_FILE}" ]
+		then
+			printf "%s\n" "ERROR: Required input file does not exist for ${SAMPLE}: ${INPUT_FILE}" 1>&2
+			SKIP=1
+		fi
+	done
+	unset INPUT_FILES
+
+	# check for existence of needed output files
+	declare -a ALREADY_EXIST_OUTPUT_FILES
+	for OUTPUT_FILE in "${OUTPUT_FILES[@]}"
+	do
+		if [ -e "${OUTPUT_FILE}" ]
+		then
+			ALREADY_EXIST_OUTPUT_FILES+=("${OUTPUT_FILE}")
+		fi
+	done
+
+	if [ "${#ALREADY_EXIST_OUTPUT_FILES[@]}" -gt 0 ]
+	then
+		printf "%s\n" "WARNING: One or more output files already exists for ${SAMPLE}. To run this step, first delete them:" 1>&2
+		printf "\trm -f \"%s\"\n" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+		SKIP=1
+	fi
+	unset ALREADY_EXIST_OUTPUT_FILES OUTPUT_FILES
+
+	# exit without submitting the job, if needed
+	if [ $SKIP -eq 0 ]
+	then
+		# ####################### #
+		# actually submit the job #
+		# ####################### #
+		HPC_JOB_NAME="${PROJECT}_approxDepth_${SAMPLE}"
+		submitJob \
+			"${HPC_JOB_NAME}" \
+			"${NUM_LONG_SEQS}" \
+			"${ASSEMBLY_FAI}" \
+			"${ALIGNMENT_BAM}" \
+			"${OUT_DEPTHS_TSV}" \
+			"${AVE_DEPTHS}"
+	fi
+	unset SKIP ALIGNMENT_BAM ALIGNMENT_BAI OUT_DEPTHS_TSV AVE_DEPTHS
+
+done < "${SAMPLE_FILE}" # end of: while read SAMPLE
 
