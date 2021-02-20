@@ -5,12 +5,12 @@ This is a pipeline for running MSMC on a SLURM-controlled Linux cluster.
 These scripts assume a very specific directory structure and naming scheme.  
 You can modify the scripts to avoid it, but using it should also be fairly straightforward.
 First, create the directory structure:
-```
-mkdir some_project_dir
-cd some_project_dir
-mkdir -p data job_files/{success,failed}
-git clone https://github.com/pickettbd/msmc-slurmPipeline scripts-msmc
-```
+	```
+	mkdir some_project_dir
+	cd some_project_dir
+	mkdir -p data job_files/{success,failed}
+	git clone https://github.com/pickettbd/msmc-slurmPipeline scripts-msmc
+	```
 The scripts *must* from the main project directory (some_project_dir) (*not* from the scripts-msmc dir).
 
 ## Data Requirements
@@ -30,6 +30,7 @@ The project assumes they are availble via system modules (e.g., Tcl or Lua), but
 - [Python](https://python.org) (v3.9.0): Programming language (v3.6+ required)
 - [R](https://www.r-project.org) (v4.0.0): Programming language for statistical computing and plotting
 	- [ggplot2](https://ggplot2.tidyverse.org) (3.3.1): a system for declaratively creating graphics
+	- [tibble](https://tibble.tidyverse.org) (3.0.1): a modern reimagining of the data.frame
 
 ## Notes
 This pipeline does not support file names or paths that have whitespace in them.
