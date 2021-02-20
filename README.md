@@ -34,3 +34,8 @@ This pipeline does not support file names or paths that have whitespace in them.
 This pipeline may be run for a single individual or multiple individuals of the same species. The assumption is that they share the same "reference" genome.
 If multiple individuals do exist, a [SNPable](http://lh3lh3.users.sourceforge.net/snpable.shtml) mask must also be made.
 
+## Licensing and Citation
+Please see the `LICENSE` file for licensing information.
+If you rely on this repo for a project (especially one that ends up being published in a peer-reviewed publication), please cite our paper and provide a link to this repo:
+> Pickett, BD, JR Glass, PG Ridge, JSK Kauwe. 2021. *De novo* genome assembly of the marine teleost, Bluefin Trevally (*Caranx melampygus*). *In Review*
+

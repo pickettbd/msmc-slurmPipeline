@@ -1,11 +1,3 @@
-#! /bin/bash
-
-tail -n +9 "${BASH_SOURCE[0]}" | head -n -1 | fold -s
-
-exit 0
-
-# Everything below this line is simple documentation
-:'
 This is a placeholder step. There is at least one step here in which *.multihetsep.txt files were generated. This needs to be fleshed out.
 
 2. generate msmc input file for a single diploid sample
@@ -63,4 +55,3 @@ the order of these msut be the same relative to eachother.
 
 # book chapter with best details
 http://link.springer.com/10.1007/978-1-0716-0199-0_7
-'

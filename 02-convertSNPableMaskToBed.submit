@@ -1,0 +1,116 @@
+#! /bin/bash
+
+# Ensure we're running from the correct location
+CWD_check()
+{
+	#local SCRIPTS_DIR
+	local MAIN_DIR
+	local RUN_DIR
+
+	SCRIPTS_DIR=$(readlink -f `dirname "${BASH_SOURCE[0]}"`)
+	MAIN_DIR=$(readlink -f `dirname "${SCRIPTS_DIR}/"`)
+	RUN_DIR=$(readlink -f .)
+
+	if [ "${RUN_DIR}" != "${MAIN_DIR}" ] || ! [[ "${SCRIPTS_DIR}" =~ ^"${MAIN_DIR}"/scripts.* ]]
+	then
+		printf "\n\t%s\n\t%s\n\n" "Script must be run from ${MAIN_DIR}" "You are currently at:   ${RUN_DIR}" 1>&2
+		exit 1
+	fi
+}
+CWD_check
+
+submitJob()
+{
+	local JOB_NAME CONVERSION_SCRIPT INPUT_FASTA OUTPUT_BED_PFX OUTPUT_BED_SFX
+	JOB_NAME="${1}"
+	CONVERSION_SCRIPT="${2}"
+	INPUT_FASTA="${3}"
+	OUTPUT_BED_PFX="${4}"
+	OUTPUT_BED_SFX="${5}"
+
+	sbatch \
+		-J ${JOB_NAME} \
+		--signal=B:USR1@60 \
+		--time=0-01:00:00 \
+		--ntasks=1 \
+		--nodes=1 \
+		--mem=8G \
+		-o job_files/%x__%j.out \
+		-e job_files/%x__%j.err \
+		${SCRIPTS_DIR}/02-convertSNPableMaskToBed.slurm \
+		"${CONVERSION_SCRIPT}" \
+		"${INPUT_FASTA}" \
+		"${OUTPUT_BED_PFX}" \
+		"${OUTPUT_BED_SFX}"
+}
+
+# ###################################### #
+# sanity check on input and output files #
+# ###################################### #
+
+# define key variables
+SPECIES="bft"
+PROJECT="${SPECIES}-msmc"
+ASSEMBLY_FA="data/assembly/asm.fa" # <-- only need to check if output files exist already
+ASSEMBLY_FAI="${ASSEMBLY_FA}.fai" # <-- only need to check if output files exist already
+FASTA2BED_MASK_SCRIPT="${SCRIPTS_DIR}/makeMappabilityMask.py"
+FASTA_MASK="data/assembly/asm_snpable-mask.fa.gz"
+BED_MASK_PFX="data/snpable/mask_"
+BED_MASK_SFX=".bed.gz"
+
+INPUT_FILES=("${FASTA_MASK}")
+OUTPUT_FILES=( $(cut -d '	' -f 1 "${ASSEMBLY_FAI}" | sed -r 's,^(.+)$,'"${BED_MASK_PFX}"'/\1'"${BED_MASK_SFX}"',' | tr '\n' ' ') ) # <-- get output files from list of sequence IDs (enables checking of output files existence)
+OUTPUT_DIR=$(readlink -n -m `dirname "${BED_MASK_PFX}"`)
+
+EXIT_EARLY=0
+
+# check for existence of needed input files
+for INPUT_FILE in "${INPUT_FILES[@]}"
+do
+	if [ ! -e "${INPUT_FILE}" ]
+	then
+		printf "%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" 1>&2
+		EXIT_EARLY=1
+	fi
+done
+unset INPUT_FILES
+
+# check for the existence of output files
+declare -a ALREADY_EXIST_OUTPUT_FILES
+for OUTPUT_FILE in "${OUTPUT_FILES[@]}"
+do
+	if [ -e "${OUTPUT_FILE}" ]
+	then
+		ALREADY_EXIST_OUTPUT_FILES+=("${OUTPUT_FILE}")
+	fi
+done
+
+if [ ${#ALREADY_EXIST_OUTPUT_FILES[@]} -gt 0 ]
+then
+	printf "%s\n\trm -f" "ERROR: Output file(s) already exist(s). To run this step, first remove it/them:" 1>&2
+	printf " %s" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+	printf "\n" 1>&2
+	EXIT_EARLY=1
+fi
+unset ALREADY_EXIST_OUTPUT_FILES OUTPUT_FILES
+
+# exit without submitting the job, if needed
+if [ $EXIT_EARLY -ne 0 ]
+then
+	exit ${EXIT_EARLY}
+fi
+unset EXIT_EARLY
+
+# create output dir (if needed)
+mkdir -p "${OUTPUT_DIR}" &> /dev/null
+
+# ####################### #
+# actually submit the job #
+# ####################### #
+HPC_JOB_NAME="${PROJECT}_SNPable-mask"
+submitJob \
+	"${HPC_JOB_NAME}" \
+	"${FASTA2BED_MASK_SCRIPT}" \
+	"${BED_MASK_PFX}" \
+	"${BED_MASK_SFX}"
+
