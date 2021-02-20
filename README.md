@@ -28,14 +28,19 @@ The project assumes they are availble via system modules (e.g., Tcl or Lua), but
 - [msmc-tools](https://github.com/stschiff/msmc-tools) (commit 123791f): Tools and Utilities for msmc and msmc2 
 - [samtools/bcftools](https://www.htslib.org) (v1.11): Suites of programs for interacting with high-throughput sequencing data
 - [Python](https://python.org) (v3.9.0): Programming language (v3.6+ required)
+- [R](https://www.r-project.org) (v4.0.0): Programming language for statistical computing and plotting
+	- [ggplot2](https://ggplot2.tidyverse.org) (3.3.1): a system for declaratively creating graphics
 
 ## Notes
 This pipeline does not support file names or paths that have whitespace in them.
 This pipeline may be run for a single individual or multiple individuals of the same species. The assumption is that they share the same "reference" genome.
 If multiple individuals do exist, a [SNPable](http://lh3lh3.users.sourceforge.net/snpable.shtml) mask must also be made.
 
+## Step-by-step Instructions
+Please view [`INSTRUCTIONS.md`](https://github.com/pickettbd/msmc-slurmPipeline/blob/master/INSTRUCTIONS.md) for a guided walkthrough.
+
 ## Licensing and Citation
-Please see the `LICENSE` file for licensing information.
-If you rely on this repo for a project (especially one that ends up being published in a peer-reviewed publication), please cite our paper and provide a link to this repo:
+Please see the [`LICENSE`](https://github.com/pickettbd/msmc-slurmPipeline/blob/master/LICENSE) file for licensing information.
+If you rely on this repo for a project (especially one that ends up being published in a peer-reviewed publication), please link to this repo and cite our paper:
 > Pickett, BD, JR Glass, PG Ridge, JSK Kauwe. 2021. *De novo* genome assembly of the marine teleost, Bluefin Trevally (*Caranx melampygus*). *In Review*
 

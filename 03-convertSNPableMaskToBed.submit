@@ -37,7 +37,7 @@ submitJob()
 		--mem=8G \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
-		${SCRIPTS_DIR}/02-convertSNPableMaskToBed.slurm \
+		${SCRIPTS_DIR}/03-convertSNPableMaskToBed.slurm \
 		"${CONVERSION_SCRIPT}" \
 		"${INPUT_FASTA}" \
 		"${OUTPUT_BED_PFX}" \

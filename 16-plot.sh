@@ -1,67 +1,73 @@
 #! /bin/bash
 
-echo "plot"
+# Ensure we're running from the correct location
+CWD_check()
+{
+	#local SCRIPTS_DIR
+	local MAIN_DIR
+	local RUN_DIR
 
-#Plot in R
-#First, you must determine the mutation rate (mu) and generation time
-#I used a value from Liu, Hansen, & Jacobsen, 2016 'Region-wide and ecotype-specific differences in demographic histories of threespine stickleback populations, estimated from whole genome sequences', Molecular Ecology, vol. 25, pp. 5187–5202. https://doi.org/10.1111/mec.13827 This was also used in an msmc paper on Hamlets (Serranidae)
-mu <- 3.7e-8 
-gen <- 4 # 2 years old * 2
+	SCRIPTS_DIR=$(readlink -f `dirname "${BASH_SOURCE[0]}"`)
+	MAIN_DIR=$(readlink -f `dirname "${SCRIPTS_DIR}/"`)
+	RUN_DIR=$(readlink -f .)
 
-BT_msmcDat<-read.table("/Users/JessicaRGlass/Documents/SAIAB_PostDoc/Projects/Comparative_Genomics/Bluefin/msmc/msmc_output/msmc.final.txt", header=TRUE)
-
-options(scipen = 7)
-plot(BT_msmcDat$left_time_boundary/mu*gen, (1/BT_msmcDat$lambda)/mu, log="x",ylim=c(0,1.5e+06),
-     type="n", xlab="Years ago", ylab="effective population size")
-	 lines(BT_msmcDat$left_time_boundary/mu*gen, (1/BT_msmcDat$lambda)/mu, type="s", col="blue")
-	
-
-# what she actually did later instead of the original listed above
-#Read in bootstrap runs for 780 Mbp replicates
-setwd("/Users/JessicaRGlass/Documents/SAIAB_PostDoc/Projects/Comparative_Genomics/Bluefin/msmc/msmc_bootstrap_780Mbp")
-
-BT_msmc_boot <- read.table("/Users/JessicaRGlass/Documents/SAIAB_PostDoc/Projects/Comparative_Genomics/Bluefin/msmc/msmc_bootstrap_780Mbp/msmc-bootstrap_concat.tsv", header = T)
-head(BT_msmc_boot)
-
-#Plot 
-dev.off()
-options(scipen = 7)
-plot(BT_msmcDat2$left_time_boundary/mu*gen, (1/BT_msmcDat2$lambda)/mu, ylim=c(0,2.5e+05), xlim = c(0,5e+05), 
-     type="n", xlab="Years ago", ylab="effective population size")
-
-
-#read in bootstrap values and plot them as lines on the graph
-  for (i in 1:max(BT_msmc_boot$Bootstrap_Round)) {
-    BT_i <- BT_msmc_boot[BT_msmc_boot$Bootstrap_Round ==i,]
-   
-    lines(BT_i$left_time_boundary/mu*gen, (1/BT_i$lambda)/mu, type="s", col="light blue", lwd = 0.5 )
-  }
-
-
-# more stuff
-
-#Calculate the median values
-d = data.frame(x=rep(0,19), y=rep(0,19)) #set up a blank dataframe
-for (i in unique(BT_msmc_boot$time_index)) {
-BT_ti <- BT_msmc_boot[BT_msmc_boot$time_index == i,]
-
-lt <- (median(BT_ti$left_time_boundary))
-l <-  (median(BT_ti$lambda_00))
-
-#put these in a data frame
-d[i, ] = c(lt, l)
-    
-print(d)  
-
+	if [ "${RUN_DIR}" != "${MAIN_DIR}" ] || ! [[ "${SCRIPTS_DIR}" =~ ^"${MAIN_DIR}"/scripts.* ]]
+	then
+		printf "\n\t%s\n\t%s\n\n" "Script must be run from ${MAIN_DIR}" "You are currently at:   ${RUN_DIR}" 1>&2
+		exit 1
+	fi
 }
+CWD_check
 
-#Amend Time 0 data to dataframe
-BT_ti.0 <- BT_msmc_boot[BT_msmc_boot$time_index == 0,]
+# #### #
+# MAIN #
+# #### #
 
-lt.0 <- (median(BT_ti.0$left_time_boundary))
-l.0 <-  (median(BT_ti.0$lambda_00))
+# define key variables
+MU="3.7e-8"
+AGE_AT_MATURITY=2
+AGE_MULTIPLIER=2
+DATA_DIR="data"
+MSMC_DIR="${DATA_DIR}/msmc"
+BOOTSTRAP_DIR="${MSMC_DIR}/bootstrap"
+MAIN_MSMC="${MSMC_DIR}/msmc.final.txt"
+BOOTSTRAP_MSMC_CONCAT="${BOOTSTRAP_DIR}/msmc-bootstrap_concat.tsv"
+OUTPUT_PLOT="${DATA_DIR}/plot.pdf"
 
-d2 <- rbind(c(lt.0,l.0), d)
-d2
-#Now plot median values
-lines(d2$x/mu*gen, (1/d2$y)/mu, type="s", col="blue", lwd = 2)
+INPUT_FILES=("${MAIN_MSMC}" "${BOOTSTRAP_MSMC_CONCAT}")
+
+EXIT_EARLY=0
+
+# check for existence of needed input files
+for INPUT_FILE in "${INPUT_FILES[@]}"
+do
+	if [ ! -e "${INPUT_FILE}" ]
+	then
+		printf "%s\n" "ERROR: Required input file does not exist: ${INPUT_FILE}" 1>&2
+		EXIT_EARLY=1
+	fi
+done
+
+# exit without submitting the job, if needed
+if [ $EXIT_EARLY -ne 0 ]
+then
+	exit ${EXIT_EARLY}
+fi
+
+# #################### #
+# actually run the job #
+# #################### #
+
+# load modules
+module purge
+module load r/4.0
+
+# run the program of interest
+time Rscript plot.R \
+	"${MU}" \
+	"${AGE_AT_MATURITY}" \
+	"${AGE_MULTIPLIER}" \
+	"${MAIN_MSMC}" \
+	"${BOOTSTRAP_MSMC_CONCAT}" \
+	"${OUTPUT_PLOT}"
+
