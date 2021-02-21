@@ -37,7 +37,7 @@ submitJob()
 		--mem=1G \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
-		${SCRIPTS_DIR}/09-multihetsep.slurm \
+		${SCRIPTS_DIR}/11-multihetsep.slurm \
 		"${OUTPUT_FILE}" \
 		"${SNPABLE_FILE}" \
 		"${INPUT_FILES[@]}"

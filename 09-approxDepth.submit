@@ -44,7 +44,7 @@ submitJob()
 		--mem-per-cpu=1G \
 		-o job_files/%x__%j.out \
 		-e job_files/%x__%j.err \
-		${SCRIPTS_DIR}/07-approxDepth.slurm \
+		${SCRIPTS_DIR}/09-approxDepth.slurm \
 		"${LONGEST_N_SEQS}" \
 		"${ASM_FAI}" \
 		"${ALN_BAM}" \

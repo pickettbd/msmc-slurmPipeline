@@ -87,7 +87,7 @@ submitJob()
 		--mem=22G \
 		-o job_files/%x__%A-%a.out \
 		-e job_files/%x__%A-%a.err \
-		${SCRIPTS_DIR}/08-mask.slurm \
+		${SCRIPTS_DIR}/10-mask.slurm \
 		"${ASM_FA}" \
 		"${ALN_BAM}" \
 		"${DEPTH}" \
