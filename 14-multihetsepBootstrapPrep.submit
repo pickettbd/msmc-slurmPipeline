@@ -53,13 +53,15 @@ getRandomSeed()
 
 submitJob()
 {
-	local JOB_NAME RANDOM_SEED BOOTSTRAP_REPS NUM_SEQS OUT_MSMC_PFX INPUT_MULTIHETSEPS
+	local JOB_NAME RANDOM_SEED BOOTSTRAP_REPS NUM_SEQS CHUNK_SIZE NUM_CHUNKS OUT_MSMC_PFX INPUT_MULTIHETSEPS
 	JOB_NAME="${1}"
 	RANDOM_SEED="${2}"
 	BOOTSTRAP_REPS="${3}"
 	NUM_SEQS="${4}"
-	OUT_DIR_PFX="${5}"
-	shift 5
+	CHUNK_SIZE="${5}"
+	NUM_CHUNKS="${6}"
+	OUT_DIR_PFX="${7}"
+	shift 7
 	INPUT_MULTIHETSEPS=("${@}")
 
 	sbatch \
@@ -75,6 +77,8 @@ submitJob()
 		"${RANDOM_SEED}" \
 		"${BOOTSTRAP_REPS}" \
 		"${NUM_SEQS}" \
+		"${CHUNK_SIZE}" \
+		"${NUM_CHUNKS}" \
 		"${OUT_DIR_PFX}" \
 		"${INPUT_MULTIHETSEPS[@]}"
 }
@@ -83,11 +87,29 @@ submitJob()
 # sanity check on input and output files #
 # ###################################### #
 
+# check for species file
+if [ ! -e "data/species.txt" ]
+then
+	printf "%s\n" "ERROR: The file \"data/species.txt\" does not exist, but it is required to allow this script to run correctly. Please refer to INSTRUCTIONS.md for details." 1>&2
+	exit 1
+fi
+
+# check for genome size file
+if [ ! -e "data/genomeSize.txt" ]
+then
+	printf "%s\n" "ERROR: The file \"data/genomeSize.txt\" does not exist, but it is required to allow this script to run correctly. Please refer to INSTRUCTIONS.md for details." 1>&2
+	exit 1
+fi
+
 # define key variables
-SPECIES="bft"
+SPECIES=`head -n 1 "data/species.txt" | tr -d '\n'`
 PROJECT="${SPECIES}-msmc"
+#GENOME_SIZE=625920000 # 625.92 Mb
+GENOME_SIZE=`head -n 1 "data/genomeSize.txt" | tr -d ',' | tr -d '\n'`
 BOOTSTRAP_REPS=1000
 NUM_SEQS=30 # the number of "chromosomes" output per rep
+CHUNK_SIZE=500000 # 500 kb, the size of each chunk
+CHUNKS_PER_SEQ=$((${GENOME_SIZE}/${CHUNK_SIZE}/${NUM_SEQS})) # the number of chunks per "chromosomes"
 SEED_FILE="data/random_seed-bootstrap.txt"
 RANDOM_SEED=`getRandomSeed "${SEED_FILE}"`
 ASSEMBLY_FAI="data/assembly/asm_long.fa.fai" # only necessary for presence of input data
@@ -148,11 +170,28 @@ mkdir -p "${OUTPUT_DIR}" &> /dev/null
 # actually submit the job #
 # ####################### #
 HPC_JOB_NAME="${PROJECT}_bootstrapPrep"
+
+#printf "INFO: Submitting job %s for %s %s using seed %u to create %u bootstrap reps.\n\tUser-specified Target Genome Size: %u\n\t Calculated Bootstrap Genome Size: %u = %u \"chromosomes\" * ( %u chunks * %u bp )\n" \
+printf "INFO: Submitting job %s using seed %u to create %u bootstrap reps.\n\tUser-specified Target Genome Size: %u\n\t Calculated Bootstrap Genome Size: %u = %u \"chromosomes\" * ( %u chunks * %u bp )\n" \
+	"${HPC_JOB_NAME}" \
+	"${RANDOM_SEED}" \
+	"${BOOTSTRAP_REPS}" \
+	"${GENOME_SIZE}" \
+	$((${NUM_SEQS}*${CHUNKS_PER_SEQ}*${CHUNK_SIZE})) \
+	"${NUM_SEQS}" \
+	"${CHUNKS_PER_SEQ}" \
+	"${CHUNK_SIZE}" \
+	1>&2
+	#"${SPECIES}" \
+	#"${PROJECT}" \
+
 submitJob \
 	"${HPC_JOB_NAME}" \
 	"${RANDOM_SEED}" \
 	"${BOOTSTRAP_REPS}" \
 	"${NUM_SEQS}" \
+	"${CHUNK_SIZE}" \
+	"${CHUNKS_PER_SEQ}" \
 	"${OUTPUT_PFX}" \
 	"${INPUT_FILES[@]}"
 

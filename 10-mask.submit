@@ -77,14 +77,16 @@ submitJob()
 
 	# longest seq for BFT is ~8.933 Mbp. So TIME > 8.91 hours and RAM > 21.02 GB.
 
+	# Update: longest seq for GT is ~89 Mbp. RAM usage exceeded 28 GB. TIME required was 23 hours. This was run on our big node with a nicer processor.
+
 	sbatch \
 		-J ${JOB_NAME} \
-		--signal=B:USR1@300 \
+		--signal=B:USR1@120 \
 		--array=${ARRAY_JOBS}%${JOBS_AT_ONCE} \
 		--time=0-10:00:00 \
 		--ntasks=1 \
 		--nodes=1 \
-		--mem=22G \
+		--mem=24G \
 		-o job_files/%x__%A-%a.out \
 		-e job_files/%x__%A-%a.err \
 		${SCRIPTS_DIR}/10-mask.slurm \
@@ -101,9 +103,16 @@ submitJob()
 # sanity check on input and output files #
 # ###################################### #
 
+# check for species file
+if [ ! -e "data/species.txt" ]
+then
+	printf "%s\n" "ERROR: The file \"data/species.txt\" does not exist, but it is required to allow this script to run correctly. Please refer to INSTRUCTIONS.md for details." 1>&2
+	exit 1
+fi
+
 # define key variables
 DEBUG=0 # 0: False, 1: True
-SPECIES="bft"
+SPECIES=`head -n 1 "data/species.txt" | tr -d '\n'`
 PROJECT="${SPECIES}-msmc"
 
 JOBS_TO_RUN_AT_ONE_TIME=100 # total across all samples
@@ -120,7 +129,7 @@ ASSEMBLY_FAI="${ASSEMBLY_FA}.fai"
 ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}"
 
 # check for the presence of input files that are not sample-specific
-declare -a INPUT_FILES=("${ASSEMBLY_FA}" "${ASSEMBLY_FAI}" "${SAMPLE_FILE}")
+declare -a INPUT_FILES=("${ASSEMBLY_FA}" "${ASSEMBLY_FAI}" "${SAMPLE_LIST}")
 for INPUT_FILE in "${INPUT_FILES[@]}"
 do
 	if [ ! -e "${INPUT_FILE}" ]
@@ -135,7 +144,7 @@ unset INPUT_FILES
 mkdir -p "${OUTPUT_DIR}" &> /dev/null
 
 # calculate number of jobs to run at once _per sample_
-NUM_SAMPLES=`cat "${SAMPLES_LIST}" | wc -l`
+NUM_SAMPLES=`cat "${SAMPLE_LIST}" | wc -l`
 if [ "${NUM_SAMPLES}" -gt 1 ]
 then
 	if [ "${NUM_SAMPLES}" -ge ${JOBS_TO_RUN_AT_ONE_TIME} ]
@@ -259,7 +268,7 @@ do
 		# create array submission ranges string
 		ARRAY_RANGE=`rangify "${TO_RUN[@]}"`
 
-		STARTED+=("${SAMPLE}")
+		#STARTED+=("${SAMPLE}")
 		STARTED_RANGES+=("${ARRAY_RANGE}")
 
 		# ####################### #
@@ -283,7 +292,7 @@ do
 	fi
 	unset SKIP TO_RUN ALREADY_FINISHED ALREADY_FINISHED_FILES ATTEMPTED ALIGNMENT_BAM ALIGNMENT_BAI AVE_DEPTHS_FILE HPC_JOB_NAME
 
-done < "${SAMPLES_LIST}" # end of: while read SAMPLE
+done < "${SAMPLE_LIST}" # end of: while read SAMPLE
 
 # ############## #
 #     REPORT     #
@@ -317,7 +326,7 @@ then
 
 	# started scaffolds for this sample
 	printf "%s\n" "The following shows which scaffolds were started for each sample:" 1>&2
-	for i in `seq 0 1 ${#STARTED[@]}`
+	for i in `seq 0 1 $((${#STARTED[@]}-1))`
 	do
 		printf "\t%s: %s\n" "${STARTED[${i}]}" "${STARTED_RANGES[${i}]}" 1>&2
 	done
@@ -327,7 +336,7 @@ then
 	if [ ${#FINISHED[@]} -gt 0 ]
 	then
 		printf "%s\n" "Of these samples that were started, the following did not have to run certain scaffolds because they had already been completed:" 1>&2
-		for i in `seq 0 1 ${#FINISHED[@]}`
+		for i in `seq 0 1 $((${#FINISHED[@]}-1))`
 		do
 			printf "\t%s: %s\n" "${FINISHED[${i}]}" "${FINISHED_RANGES[${i}]}" 1>&2
 		done
@@ -338,7 +347,7 @@ then
 	if [ ${#RESTARTED[@]} -gt 0 ]
 	then
 		printf "%s\n" "Of these samples that were started, the following had scaffolds that were previously run but did not complete successfully for some reason:" 1>&2
-		for i in `seq 0 1 ${#RESTARTED[@]}`
+		for i in `seq 0 1 $((${#RESTARTED[@]}-1))`
 		do
 			printf "\t%s: %s\n" "${RESTARTED[${i}]}" "${RESTARTED_RANGES[${i}]}" 1>&2
 		done

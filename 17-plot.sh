@@ -63,7 +63,7 @@ module purge
 module load r/4.0
 
 # run the program of interest
-time Rscript plot.R \
+time Rscript "${SCRIPTS_DIR}"/plot.R \
 	"${MU}" \
 	"${AGE_AT_MATURITY}" \
 	"${AGE_MULTIPLIER}" \

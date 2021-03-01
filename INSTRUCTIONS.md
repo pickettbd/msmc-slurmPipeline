@@ -34,7 +34,13 @@ First, create the directory structure:
 When you run scripts stored in the `scripts-msmc` directory, you *must* run them from the main project directory (`some_project_dir`), *not* from the `scripts-msmc` or `data` directories.
 
 ## Setup (Input Files)
-This pipeline requires a "reference" genome assembly as input. Technically, per-sample read data is also required, but this pipeline assumes you generated alignments with it previously and, thus, ignores those input reads.
+This pipeline requires a "reference" genome assembly as input, which is handled in step 00. Technically, per-sample read data is also required, but this pipeline assumes you generated alignments with it previously (step 08) and, thus, ignores those input reads.
+Two additional input file are **required**:
+
+1. `data/species.txt`
+	To generate intelligent SLURM job names, the species this analysis is being performed on is incorporated into the job names, and this name is acquired from a file called `data/species.txt`. It should have exactly one line with a single string (no whitespace!); abbreviations are encouraged for brevity. As an example, we ran this analysis on the bluefin trevally, so our entry in this file was `bft`. No fancy check is performed to ensure that this file exists, so make sure you create it and at least put some value in it.
+2. `data/genomeSize.txt`
+	This information is required for the bootstrapping steps. You must provide the expected haploid genome size in bases (i.e., no k/m/g suffixes allowed). This must occur in a single line in the file. Only one entry is allowed. For example, with the bluefin trevally, our value was `782400000` (782.4 Mb). Commas are allowed (they will simply be ignored), so `782,400,000` would also be sufficient.
 
 ### 00 - Copy Assembly <a name="copyAsm"></a>
 The script associated with this step (`00-copyAsm.sh`) is just a placeholder. If you run it, it will display a brief message reminding you what needs to be done during this step. Running the script *does not* complete the step for you.

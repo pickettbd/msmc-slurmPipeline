@@ -30,7 +30,7 @@ submitJob()
 	sbatch \
 		-J ${JOB_NAME} \
 		--signal=B:USR1@300 \
-		--time=0-01:00:00 \
+		--time=0-00:30:00 \
 		--ntasks=4 \
 		--nodes=1 \
 		--mem=4G \
@@ -45,8 +45,15 @@ submitJob()
 # sanity check on input and output files #
 # ###################################### #
 
+# check for species file
+if [ ! -e "data/species.txt" ]
+then
+	printf "%s\n" "ERROR: The file \"data/species.txt\" does not exist, but it is required to allow this script to run correctly. Please refer to INSTRUCTIONS.md for details." 1>&2
+	exit 1
+fi
+
 # define key variables
-SPECIES="bft"
+SPECIES=`head -n 1 "data/species.txt" | tr -d '\n'`
 PROJECT="${SPECIES}-msmc"
 ASSEMBLY_FAI="data/assembly/asm_long.fa.fai" # only necessary for presence of input data
 ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}" # only necessary for presence of input data

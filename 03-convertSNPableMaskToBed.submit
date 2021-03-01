@@ -48,8 +48,15 @@ submitJob()
 # sanity check on input and output files #
 # ###################################### #
 
+# check for species file
+if [ ! -e "data/species.txt" ]
+then
+	printf "%s\n" "ERROR: The file \"data/species.txt\" does not exist, but it is required to allow this script to run correctly. Please refer to INSTRUCTIONS.md for details." 1>&2
+	exit 1
+fi
+
 # define key variables
-SPECIES="bft"
+SPECIES=`head -n 1 "data/species.txt" | tr -d '\n'`
 PROJECT="${SPECIES}-msmc"
 ASSEMBLY_FA="data/assembly/asm.fa" # <-- only need to check if output files exist already
 ASSEMBLY_FAI="${ASSEMBLY_FA}.fai" # <-- only need to check if output files exist already

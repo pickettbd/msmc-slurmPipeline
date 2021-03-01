@@ -47,8 +47,15 @@ submitJob()
 # sanity check on input and output files #
 # ###################################### #
 
+# check for species file
+if [ ! -e "data/species.txt" ]
+then
+	printf "%s\n" "ERROR: The file \"data/species.txt\" does not exist, but it is required to allow this script to run correctly. Please refer to INSTRUCTIONS.md for details." 1>&2
+	exit 1
+fi
+
 # define key variables
-SPECIES="bft"
+SPECIES=`head -n 1 "data/species.txt" | tr -d '\n'`
 PROJECT="${SPECIES}-msmc"
 ASSEMBLY_FAI="data/assembly/asm_long.fa.fai"
 ASSEMBLY_SEQIDS="${ASSEMBLY_FAI}"
@@ -158,26 +165,42 @@ do
 			COMPLETED+=("${SCAFFOLD_NAME}")
 		fi
 	fi
-	unset SKIP MISSING_INPUT EXISTING_OUTPUT
+	unset SKIP MISSING_INPUT EXISTING_OUTPUT INPUT_FILES SNPABLE_FILE MULTIHETSEP_FILE HPC_JOB_NAME
 
 done < <(cut -d '	' -f 1 "${ASSEMBLY_SEQIDS}" | sort -V)
 
 # report on which jobs were successfully submitted or not and why
-printf "%s " "The following scaffolds were submitted for jobs:" "${STARTED[@]}" 1>&2
-printf "\n" 1>&2
+if [ ${#STARTED[@]} -gt 0 ]
+then
+	printf "%s " "The following scaffolds were submitted for jobs:" "${STARTED[@]}" 1>&2
+	printf "\n" 1>&2
+fi
 
-printf "%s " "The following scaffolds were skipped for some reason, thus we did not submit a job:" "${SKIPPED[@]}" 1>&2
-printf "\n" 1>&2
+if [ ${#SKIPPED[@]} -gt 0 ]
+then
+	printf "%s " "The following scaffolds were skipped for some reason, thus we did not submit a job:" "${SKIPPED[@]}" 1>&2
+	printf "\n" 1>&2
+fi
 
-printf "%s " "The following scaffolds were skipped because they were already completed:" "${COMPLETED[@]}" 1>&2
-printf "\n" 1>&2
-printf "%s\n" "To re-run the already completed jobs, please delete the output files for each job you wish to re-run. To re-run ALL the already completed jobs, you would need to run these commands:" 1>&2
-printf "\trm -f %s\n" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+if [ ${#COMPLETED[@]} -gt 0 ]
+then
+	printf "%s " "The following scaffolds were skipped because they were already completed:" "${COMPLETED[@]}" 1>&2
+	printf "\n" 1>&2
+fi
 
-printf "%s " "The following scaffolds were skipped because one or more input files did not exist:" "${UNSTARTED[@]}" 1>&2
-printf "\n" 1>&2
-printf "%s\n" "To start jobs for these scaffolds, please create the needed input files by running the previous steps to completion. Here is a list of all the files that should (but do not!) exist:" 1>&2
-printf "\t%s\n" "${NEEDED_INPUT_FILES[@]}" 1>&2
-printf "\n" 1>&2
+if [ ${#ALREADY_EXIST_OUTPUT_FILES[@]} -gt 0 ]
+then
+	printf "%s\n" "To re-run the already completed jobs, please delete the output files for each job you wish to re-run. To re-run ALL the already completed jobs, you would need to run these commands:" 1>&2
+	printf "\trm -f %s\n" "${ALREADY_EXIST_OUTPUT_FILES[@]}" 1>&2
+fi
 
+if [ ${#UNSTARTED[@]} -gt 0 ]
+then
+	NEEDED_INPUT_FILES=(`printf '%s\n' "${NEEDED_INPUT_FILES[@]}" | sort -Vu | tr '\n' ' '`)
+	printf "%s " "The following scaffolds were skipped because one or more input files did not exist:" "${UNSTARTED[@]}" 1>&2
+	printf "\n" 1>&2
+	printf "%s\n" "To start jobs for these scaffolds, please create the needed input files by running the previous steps to completion. Here is a list of all the files that should (but do not!) exist:" 1>&2
+	printf "\t%s\n" "${NEEDED_INPUT_FILES[@]}" 1>&2
+	printf "\n" 1>&2
+fi
 

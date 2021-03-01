@@ -99,8 +99,10 @@ module load python/3.9.0
 RANDOM_SEED="${1}"
 BOOTSTRAP_REPS="${2}"
 NUM_SEQS="${3}"
-OUTPUT_DIR_PFX=$(readlink -n -m "${4}")
-shift 4
+CHUNK_SIZE="${4}"
+NUM_CHUNKS="${5}"
+OUTPUT_DIR_PFX=$(readlink -n -m "${6}")
+shift 6
 INPUT_MULTIHETSEP_FILES=("${@}")
 
 OUTPUT_DIR=$(readlink -n -m `dirname "${OUTPUT_DIR_PFX}"`)
@@ -128,8 +130,8 @@ mkdir -p "${OUTPUT_DIR}" &> /dev/null
 #	run the program of interest
 time multihetsep_bootstrap.py \
 	--nr_bootstraps ${BOOTSTRAP_REPS} \
-	--chunk_size 500000 \
-	--chunks_per_chromosome 52 \
+	--chunk_size ${CHUNK_SIZE} \
+	--chunks_per_chromosome ${NUM_CHUNKS} \
 	--nr_chromosomes ${NUM_SEQS} \
 	--seed "${RANDOM_SEED}" \
 	"${OUTPUT_DIR_PFX}" \
