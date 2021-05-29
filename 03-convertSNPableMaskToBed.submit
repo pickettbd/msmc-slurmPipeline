@@ -118,6 +118,7 @@ HPC_JOB_NAME="${PROJECT}_SNPable-mask"
 submitJob \
 	"${HPC_JOB_NAME}" \
 	"${FASTA2BED_MASK_SCRIPT}" \
+	"${FASTA_MASK}" \
 	"${BED_MASK_PFX}" \
 	"${BED_MASK_SFX}"
 

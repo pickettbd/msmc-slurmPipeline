@@ -23,7 +23,7 @@ def extractSpecificSequences(ifn, ofn, heads):
 				while line != '' and line[0] != '>':
 					seq += line.rstrip('\n')
 					line = ifd.readline()
-				if header in heads:
+				if header in heads or header.split(' ')[0] in heads:
 					ofd.write(f">{header}\n{seq}\n")
 
 if __name__ == "__main__":
