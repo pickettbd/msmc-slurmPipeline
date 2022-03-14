@@ -5,12 +5,12 @@ This is a pipeline for running MSMC on a SLURM-controlled Linux cluster.
 These scripts assume a very specific directory structure and naming scheme.  
 You can modify the scripts to avoid it, but using it should also be fairly straightforward.
 First, create the directory structure:
-	```
+```
 	mkdir some_project_dir
 	cd some_project_dir
 	mkdir -p data job_files/{success,failed}
 	git clone https://github.com/pickettbd/msmc-slurmPipeline scripts-msmc
-	```
+```
 The scripts *must* from the main project directory (some_project_dir) (*not* from the scripts-msmc dir).
 
 ## Data Requirements
@@ -43,5 +43,5 @@ Please view [`INSTRUCTIONS.md`](https://github.com/pickettbd/msmc-slurmPipeline/
 ## Licensing and Citation
 Please see the [`LICENSE`](https://github.com/pickettbd/msmc-slurmPipeline/blob/master/LICENSE) file for licensing information.
 If you rely on this repo for a project (especially one that ends up being published in a peer-reviewed publication), please link to this repo and cite our paper:
-> Pickett, BD, JR Glass, PG Ridge, JSK Kauwe. 2021. *De novo* genome assembly of the marine teleost, Bluefin Trevally (*Caranx melampygus*). *In Review*
+> Pickett BD, Glass JR, Ridge PG, Kauwe JSK. 2021. *De novo* genome assembly of the marine teleost, Bluefin Trevally (*Caranx melampygus*). *G3 Genes|Genomes|Genetics* 11(10):jkab229. doi: [10.1093/g3journal/jkab229](https://doi.org/10.1093/g3journal/jkab229).
 
